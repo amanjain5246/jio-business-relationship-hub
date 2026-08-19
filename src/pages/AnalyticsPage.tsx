@@ -6,6 +6,7 @@ import { HealthDot } from '@/components/ui/HealthBadge';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { AccountAvatar } from '@/components/ui/Avatar';
 import { formatINR, formatDate, daysUntil } from '@/utils/format';
+import { openIssueCount } from '@/utils/accountStats';
 import { BarChart3, TrendingUp, AlertTriangle, Users, IndianRupee, Building2 } from 'lucide-react';
 import type { AccountHealth, OpportunityStage, IssueCategory, InteractionChannel } from '@/types/models';
 
@@ -91,7 +92,7 @@ export function AnalyticsPage({ onNavigate }: AnalyticsPageProps) {
     if (!rmMap[a.relationshipManager]) rmMap[a.relationshipManager] = { accounts: 0, arr: 0, issues: 0 };
     rmMap[a.relationshipManager].accounts++;
     rmMap[a.relationshipManager].arr += a.arr;
-    rmMap[a.relationshipManager].issues += a.openIssues;
+    rmMap[a.relationshipManager].issues += openIssueCount(data, a.id);
   });
   const rmData = Object.entries(rmMap).sort((a, b) => b[1].arr - a[1].arr);
 

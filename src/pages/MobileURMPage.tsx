@@ -5,11 +5,21 @@ import { AccountAvatar, Avatar } from '@/components/ui/Avatar';
 import { HealthBadge } from '@/components/ui/HealthBadge';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { formatINR, formatDate, genId } from '@/utils/format';
+import {
+  sentimentCustomer360Updates,
+  recommendFollowUpWindow,
+  isSignificantlyLate,
+  findMatchingOpenIssue,
+  findMatchingOpenOpportunity,
+  buildCustomerFacingSummary,
+  type FollowUpRecommendation,
+} from '@/utils/interactionCompletionEngine';
+import { findSchedulingConflicts } from '@/utils/schedulingEngine';
+import { useToast } from '@/components/ui/ToastProvider';
 import type {
   Account,
   Contact,
   InteractionChannel,
-  InteractionDirection,
   Issue,
   IssuePriority,
   IssueCategory,
@@ -30,6 +40,7 @@ import {
   ChevronRight,
   Clock,
   FileText,
+  Loader2,
   MapPin,
   Phone,
   PhoneCall,
@@ -46,7 +57,6 @@ import {
   Building2,
   User,
   ClipboardList,
-  ListChecks,
 } from 'lucide-react';
 
 interface MobileURMPageProps {
@@ -62,6 +72,7 @@ type Step =
   | 'customer360'
   | 'issue'
   | 'opportunity'
+  | 'commitments'
   | 'review'
   | 'mom'
   | 'schedule'
@@ -76,6 +87,7 @@ const STEPS: { id: Step; label: string }[] = [
   { id: 'customer360', label: 'Customer 360' },
   { id: 'issue', label: 'Issues' },
   { id: 'opportunity', label: 'Opportunities' },
+  { id: 'commitments', label: 'Commitments' },
   { id: 'review', label: 'Review' },
   { id: 'mom', label: 'MOM' },
   { id: 'schedule', label: 'Next Meeting' },
@@ -96,9 +108,25 @@ const CAL_TYPES: CalendarType[] = ['QBR', 'Renewal', 'Review', 'Follow-up', 'Exe
 const MEETING_MODES: MeetingMode[] = ['In-Person', 'Virtual', 'Phone', 'Hybrid'];
 
 export function MobileURMPage({ onNavigate }: MobileURMPageProps) {
-  const { data, addInteraction, addIssue, addOpportunity, addMomSummary, addCalendarRecord, addSchedulingHistory, addNotification, updateAccount } = useStore();
+  const {
+    data,
+    addInteraction,
+    addIssue,
+    updateIssue,
+    addOpportunity,
+    updateOpportunity,
+    addMomSummary,
+    addCalendarRecord,
+    addSchedulingHistory,
+    addNotification,
+    updateAccount,
+    updateCustomer360,
+    addAccountabilityEvent,
+  } = useStore();
+  const toast = useToast();
 
   const [step, setStep] = useState<Step>('today');
+  const [finalizing, setFinalizing] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
   const [mode, setMode] = useState<MeetingMode>('In-Person');
@@ -109,6 +137,7 @@ export function MobileURMPage({ onNavigate }: MobileURMPageProps) {
   const [discoveryNotes, setDiscoveryNotes] = useState('');
   const [capturedIssues, setCapturedIssues] = useState<Issue[]>([]);
   const [capturedOpps, setCapturedOpps] = useState<Opportunity[]>([]);
+  const [commitments, setCommitments] = useState<{ id: string; task: string; owner: string; dueDate: string }[]>([]);
   const [momGenerated, setMomGenerated] = useState<MomSummary | null>(null);
   const [nextMeeting, setNextMeeting] = useState<{ date: string; time: string; durationMins: number; type: CalendarType; mode: MeetingMode; purpose: string }>({
     date: '',
@@ -118,6 +147,7 @@ export function MobileURMPage({ onNavigate }: MobileURMPageProps) {
     mode: 'Virtual',
     purpose: '',
   });
+  const [lateSchedulingReason, setLateSchedulingReason] = useState('');
 
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -141,6 +171,38 @@ export function MobileURMPage({ onNavigate }: MobileURMPageProps) {
     [data.interactions, today],
   );
 
+  const existingOpenIssues = useMemo(
+    () => (account ? data.issues.filter((i) => i.accountId === account.id && i.status !== 'Resolved' && i.status !== 'Closed') : []),
+    [data.issues, account],
+  );
+  const existingOpenOpps = useMemo(
+    () => (account ? data.opportunities.filter((o) => o.accountId === account.id && o.stage !== 'Closed Won' && o.stage !== 'Closed Lost') : []),
+    [data.opportunities, account],
+  );
+  const hasP1Issue = useMemo(
+    () => capturedIssues.some((i) => i.priority === 'P1') || existingOpenIssues.some((i) => i.priority === 'P1'),
+    [capturedIssues, existingOpenIssues],
+  );
+  const followUpRecommendation: FollowUpRecommendation | null = useMemo(
+    () => (account ? recommendFollowUpWindow({ health: account.health, segment: account.segment, sentiment, hasP1Issue }) : null),
+    [account, sentiment, hasP1Issue],
+  );
+  const nextMeetingIsSignificantlyLate =
+    !!followUpRecommendation && !!nextMeeting.date && isSignificantlyLate(nextMeeting.date, followUpRecommendation);
+  const schedulingConflicts = useMemo(
+    () =>
+      account && nextMeeting.date
+        ? findSchedulingConflicts(data, {
+            accountId: account.id,
+            owner: account.relationshipManager,
+            date: nextMeeting.date,
+            time: nextMeeting.time,
+            durationMins: nextMeeting.durationMins,
+          })
+        : [],
+    [data, account, nextMeeting.date, nextMeeting.time, nextMeeting.durationMins],
+  );
+
   const canProceed = (): boolean => {
     switch (step) {
       case 'today': return true;
@@ -151,9 +213,10 @@ export function MobileURMPage({ onNavigate }: MobileURMPageProps) {
       case 'customer360': return true;
       case 'issue': return true;
       case 'opportunity': return true;
+      case 'commitments': return true;
       case 'review': return true;
       case 'mom': return true;
-      case 'schedule': return true;
+      case 'schedule': return !nextMeetingIsSignificantlyLate || lateSchedulingReason.trim().length > 0;
       case 'done': return false;
       default: return false;
     }
@@ -191,11 +254,17 @@ export function MobileURMPage({ onNavigate }: MobileURMPageProps) {
   };
 
   const finalize = () => {
+    if (!account || finalizing) return;
+    setFinalizing(true);
+    setTimeout(() => commitFinalize(), 450);
+  };
+
+  const commitFinalize = () => {
     if (!account) return;
     const owner = account.relationshipManager;
     const now = new Date().toISOString();
 
-    // Create interaction record (never overwrite existing)
+    // 1. Create interaction record — this is the event the rest of the workflow hangs off
     const interaction: Interaction = {
       id: genId('int'),
       accountId: account.id,
@@ -211,16 +280,79 @@ export function MobileURMPage({ onNavigate }: MobileURMPageProps) {
     };
     addInteraction(interaction);
 
-    // Create issues
-    capturedIssues.forEach((iss) => addIssue(iss));
+    // 2. Create or update issues — reuse a still-open issue with a matching title instead of duplicating it
+    let issuesCreated = 0;
+    let issuesUpdated = 0;
+    capturedIssues.forEach((iss) => {
+      const match = findMatchingOpenIssue(iss.title, existingOpenIssues);
+      if (match) {
+        updateIssue(match.id, {
+          description: `${match.description}\n\nUpdate from ${formatDate(today)} interaction: ${iss.description}`,
+          updatedAt: today,
+          priority: iss.priority === 'P1' ? 'P1' : match.priority,
+          healthImpact: iss.priority === 'P1' ? 'red' : match.healthImpact,
+        });
+        issuesUpdated += 1;
+      } else {
+        addIssue(iss);
+        issuesCreated += 1;
+      }
+    });
 
-    // Create opportunities
-    capturedOpps.forEach((opp) => addOpportunity(opp));
+    // 3. Create or update opportunities — same reuse-by-name logic
+    let oppsCreated = 0;
+    let oppsUpdated = 0;
+    capturedOpps.forEach((opp) => {
+      const match = findMatchingOpenOpportunity(opp.name, existingOpenOpps);
+      if (match) {
+        updateOpportunity(match.id, {
+          stage: opp.stage,
+          probability: opp.probability,
+          value: opp.value || match.value,
+          updatedAt: today,
+          nextStep: opp.nextStep || match.nextStep,
+        });
+        oppsUpdated += 1;
+      } else {
+        addOpportunity(opp);
+        oppsCreated += 1;
+      }
+    });
 
-    // Create MOM
-    if (momGenerated) addMomSummary(momGenerated);
+    // 4. Update Customer 360 from interaction sentiment (history-tracked by the store)
+    if (c360) {
+      const c360Updates = sentimentCustomer360Updates(sentiment, c360);
+      if (Object.keys(c360Updates).length > 0) {
+        updateCustomer360(account.id, c360Updates, owner, 'Interaction Completion');
+      }
+    }
 
-    // Create next meeting
+    // 5. Create MOM — regenerate the customer-facing summary now that the next meeting
+    // (decided in a later step) is known, so it can reference the scheduled check-in.
+    if (momGenerated) {
+      addMomSummary({
+        ...momGenerated,
+        customerFacingSummary: buildCustomerFacingSummary({
+          subject: subject || `interaction with ${account.name}`,
+          commitments,
+          nextMeeting: nextMeeting.date ? nextMeeting : null,
+        }),
+      });
+    }
+
+    // 6. Create accountability history for this interaction
+    addAccountabilityEvent({
+      id: genId('acc-evt'),
+      accountId: account.id,
+      type: 'Interaction Logged',
+      title: `Interaction logged — ${subject}`,
+      description: `${CHANNEL_BY_MODE[mode]} interaction with ${selectedContact?.name || 'contact'} logged with ${sentiment} sentiment. ${issuesCreated + issuesUpdated} issue(s) touched, ${oppsCreated + oppsUpdated} opportunity update(s), ${commitments.length} commitment(s) captured.`,
+      actor: owner,
+      date: today,
+      impact: sentiment === 'negative' || hasP1Issue ? 'High' : 'Medium',
+    });
+
+    // 7. Create next meeting, carrying forward the late-scheduling justification if one was required
     if (nextMeeting.date) {
       const calId = genId('cal');
       const cal: CalendarRecord = {
@@ -235,7 +367,14 @@ export function MobileURMPage({ onNavigate }: MobileURMPageProps) {
         mode: nextMeeting.mode,
         location: nextMeeting.mode === 'In-Person' ? account.hqCity : 'Virtual',
         purpose: nextMeeting.purpose,
-        notes: `Scheduled from mobile URM after interaction: ${subject}`,
+        notes: [
+          `Scheduled from mobile URM after interaction: ${subject}`,
+          nextMeetingIsSignificantlyLate && lateSchedulingReason.trim()
+            ? `Late-scheduling justification: ${lateSchedulingReason.trim()}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(' — '),
         attendees: [owner, selectedContact?.name || ''].filter(Boolean),
         owner,
         status: 'Scheduled',
@@ -248,26 +387,42 @@ export function MobileURMPage({ onNavigate }: MobileURMPageProps) {
         action: 'Scheduled',
         newDate: nextMeeting.date,
         newTime: nextMeeting.time,
+        reason: nextMeetingIsSignificantlyLate ? lateSchedulingReason.trim() : undefined,
         actor: owner,
         timestamp: now,
       });
     }
 
-    // Update account last interaction
+    // 8. Update account last interaction
     updateAccount(account.id, { lastInteraction: today });
 
-    // Notification
+    // 9. Notifications
     addNotification({
       id: genId('not'),
       type: 'Interaction',
       title: `Interaction logged: ${account.name}`,
-      message: `${CHANNEL_BY_MODE[mode]} — ${subject}. ${capturedIssues.length} issues, ${capturedOpps.length} opportunities captured.`,
+      message: `${CHANNEL_BY_MODE[mode]} — ${subject}. ${issuesCreated} new / ${issuesUpdated} updated issue(s), ${oppsCreated} new / ${oppsUpdated} updated opportunity(ies).`,
       accountId: account.id,
       createdAt: now,
       read: false,
       priority: capturedIssues.some((i) => i.priority === 'P1') ? 'high' : 'medium',
     });
 
+    if (!nextMeeting.date && followUpRecommendation) {
+      addNotification({
+        id: genId('not'),
+        type: 'System',
+        title: `Follow-up recommended: ${account.name}`,
+        message: `No next meeting was scheduled. Recommended window: ${followUpRecommendation.minDays}-${followUpRecommendation.maxDays} days (by ${formatDate(followUpRecommendation.idealDate)}) — ${followUpRecommendation.reasonLabel}.`,
+        accountId: account.id,
+        createdAt: now,
+        read: false,
+        priority: account.health === 'red' ? 'high' : 'medium',
+      });
+    }
+
+    toast.success(`Interaction with ${account.name} saved.`);
+    setFinalizing(false);
     setStep('done');
   };
 
@@ -283,8 +438,11 @@ export function MobileURMPage({ onNavigate }: MobileURMPageProps) {
     setDiscoveryNotes('');
     setCapturedIssues([]);
     setCapturedOpps([]);
+    setCommitments([]);
     setMomGenerated(null);
     setNextMeeting({ date: '', time: '10:00', durationMins: 60, type: 'Follow-up', mode: 'Virtual', purpose: '' });
+    setLateSchedulingReason('');
+    setFinalizing(false);
   };
 
   return (
@@ -388,6 +546,15 @@ export function MobileURMPage({ onNavigate }: MobileURMPageProps) {
           />
         )}
 
+        {step === 'commitments' && account && (
+          <CommitmentsStep
+            account={account}
+            contact={selectedContact}
+            commitments={commitments}
+            setCommitments={setCommitments}
+          />
+        )}
+
         {step === 'review' && account && (
           <ReviewStep
             account={account}
@@ -399,7 +566,9 @@ export function MobileURMPage({ onNavigate }: MobileURMPageProps) {
             duration={duration}
             capturedIssues={capturedIssues}
             capturedOpps={capturedOpps}
+            commitments={commitments}
             discoveryNotes={discoveryNotes}
+            followUpRecommendation={followUpRecommendation}
           />
         )}
 
@@ -412,13 +581,25 @@ export function MobileURMPage({ onNavigate }: MobileURMPageProps) {
             discoveryNotes={discoveryNotes}
             capturedIssues={capturedIssues}
             capturedOpps={capturedOpps}
+            commitments={commitments}
+            nextMeeting={nextMeeting}
             momGenerated={momGenerated}
             setMomGenerated={setMomGenerated}
           />
         )}
 
         {step === 'schedule' && account && (
-          <ScheduleStep account={account} contact={selectedContact} nextMeeting={nextMeeting} setNextMeeting={setNextMeeting} />
+          <ScheduleStep
+            account={account}
+            contact={selectedContact}
+            nextMeeting={nextMeeting}
+            setNextMeeting={setNextMeeting}
+            recommendation={followUpRecommendation}
+            isSignificantlyLate={nextMeetingIsSignificantlyLate}
+            lateSchedulingReason={lateSchedulingReason}
+            setLateSchedulingReason={setLateSchedulingReason}
+            conflicts={schedulingConflicts}
+          />
         )}
 
         {step === 'done' && account && (
@@ -431,12 +612,13 @@ export function MobileURMPage({ onNavigate }: MobileURMPageProps) {
         <div className="sticky bottom-0 bg-white border-t border-ink-200 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
           <button
             onClick={step === 'schedule' ? finalize : handleNext}
-            disabled={!canProceed()}
+            disabled={!canProceed() || finalizing}
             className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-brand-600 text-white text-base font-semibold shadow-sm hover:bg-brand-700 active:scale-[0.99] transition disabled:opacity-40 disabled:pointer-events-none"
           >
             {step === 'schedule' ? (
               <>
-                <CheckCircle2 className="h-5 w-5" /> Complete & Save
+                {finalizing ? <Loader2 className="h-5 w-5 animate-spin" /> : <CheckCircle2 className="h-5 w-5" />}
+                {finalizing ? 'Saving…' : 'Complete & Save'}
               </>
             ) : (
               <>
@@ -1021,7 +1203,7 @@ function IssueStep({
                   <p className="text-sm font-medium text-ink-900 truncate">{iss.title}</p>
                   <p className="text-xs text-ink-400">{iss.priority} · {iss.category}</p>
                 </div>
-                <button onClick={() => setCapturedIssues((prev) => prev.filter((x) => x.id !== iss.id))} className="text-ink-300 hover:text-red-500">
+                <button onClick={() => setCapturedIssues((prev) => prev.filter((x) => x.id !== iss.id))} className="p-2 -m-2 rounded-lg text-ink-300 hover:text-red-500 hover:bg-red-50 transition" aria-label="Remove issue">
                   <X className="h-4 w-4" />
                 </button>
               </div>
@@ -1130,13 +1312,102 @@ function OpportunityStep({
                   <p className="text-sm font-medium text-ink-900 truncate">{opp.name}</p>
                   <p className="text-xs text-ink-400">{formatINR(opp.value)} · {opp.stage} · {opp.probability}%</p>
                 </div>
-                <button onClick={() => setCapturedOpps((prev) => prev.filter((x) => x.id !== opp.id))} className="text-ink-300 hover:text-red-500">
+                <button onClick={() => setCapturedOpps((prev) => prev.filter((x) => x.id !== opp.id))} className="p-2 -m-2 rounded-lg text-ink-300 hover:text-red-500 hover:bg-red-50 transition" aria-label="Remove opportunity">
                   <X className="h-4 w-4" />
                 </button>
               </div>
             ))}
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+function CommitmentsStep({
+  account,
+  contact,
+  commitments,
+  setCommitments,
+}: {
+  account: Account;
+  contact: Contact | null;
+  commitments: { id: string; task: string; owner: string; dueDate: string }[];
+  setCommitments: React.Dispatch<React.SetStateAction<{ id: string; task: string; owner: string; dueDate: string }[]>>;
+}) {
+  const [task, setTask] = useState('');
+  const [owner, setOwner] = useState(account.relationshipManager);
+  const [dueDate, setDueDate] = useState(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10));
+
+  const addCommitment = () => {
+    if (!task.trim()) return;
+    setCommitments((prev) => [...prev, { id: genId('cmt'), task: task.trim(), owner: owner.trim() || account.relationshipManager, dueDate }]);
+    setTask('');
+    setDueDate(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10));
+  };
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-lg font-bold text-ink-900 mb-1">Commitments</h2>
+        <p className="text-sm text-ink-500">What did we commit to, and by when?</p>
+      </div>
+
+      <div className="rounded-xl border-2 border-ink-200 p-4 space-y-3">
+        <p className="text-sm font-semibold text-ink-900">Add Commitment</p>
+        <input type="text" value={task} onChange={(e) => setTask(e.target.value)} placeholder="e.g. Send pricing proposal" className="input" />
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-xs text-ink-400 mb-1 block">Owner</label>
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                onClick={() => setOwner(account.relationshipManager)}
+                className={`flex-1 py-2 rounded-lg border-2 text-xs font-medium truncate transition ${owner === account.relationshipManager ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-ink-200 text-ink-500'}`}
+              >
+                Us ({account.relationshipManager.split(' ')[0]})
+              </button>
+              {contact && (
+                <button
+                  type="button"
+                  onClick={() => setOwner(contact.name)}
+                  className={`flex-1 py-2 rounded-lg border-2 text-xs font-medium truncate transition ${owner === contact.name ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-ink-200 text-ink-500'}`}
+                >
+                  {contact.name.split(' ')[0]}
+                </button>
+              )}
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-ink-400 mb-1 block">Due Date</label>
+            <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="input" />
+          </div>
+        </div>
+        <button onClick={addCommitment} disabled={!task.trim()} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-brand-600 text-white text-sm font-semibold disabled:opacity-40 active:scale-[0.99] transition">
+          <Plus className="h-4 w-4" /> Add Commitment
+        </button>
+      </div>
+
+      {commitments.length > 0 ? (
+        <div>
+          <p className="text-xs font-semibold text-ink-400 uppercase mb-2">Captured ({commitments.length})</p>
+          <div className="space-y-2">
+            {commitments.map((c) => (
+              <div key={c.id} className="flex items-center gap-2 p-3 rounded-lg border border-ink-200">
+                <ClipboardList className="h-4 w-4 text-brand-500 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-ink-900 truncate">{c.task}</p>
+                  <p className="text-xs text-ink-400">{c.owner} · Due {formatDate(c.dueDate)}</p>
+                </div>
+                <button onClick={() => setCommitments((prev) => prev.filter((x) => x.id !== c.id))} className="p-2 -m-2 rounded-lg text-ink-300 hover:text-red-500 hover:bg-red-50 transition" aria-label="Remove commitment">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <p className="text-xs text-ink-400 text-center">No commitments? Skip this step if nothing was promised.</p>
       )}
     </div>
   );
@@ -1152,7 +1423,9 @@ function ReviewStep({
   duration,
   capturedIssues,
   capturedOpps,
+  commitments,
   discoveryNotes,
+  followUpRecommendation,
 }: {
   account: Account;
   contact: Contact | null;
@@ -1163,7 +1436,9 @@ function ReviewStep({
   duration: number;
   capturedIssues: Issue[];
   capturedOpps: Opportunity[];
+  commitments: { id: string; task: string; owner: string; dueDate: string }[];
   discoveryNotes: string;
+  followUpRecommendation: FollowUpRecommendation | null;
 }) {
   const rows = [
     { icon: Building2, label: 'Account', value: account.name },
@@ -1211,7 +1486,7 @@ function ReviewStep({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <div className="rounded-xl border border-ink-200 p-3 text-center">
           <AlertTriangle className="h-5 w-5 text-amber-500 mx-auto mb-1" />
           <p className="text-2xl font-bold text-ink-900">{capturedIssues.length}</p>
@@ -1222,7 +1497,26 @@ function ReviewStep({
           <p className="text-2xl font-bold text-ink-900">{capturedOpps.length}</p>
           <p className="text-xs text-ink-400">Opportunities</p>
         </div>
+        <div className="rounded-xl border border-ink-200 p-3 text-center">
+          <ClipboardList className="h-5 w-5 text-brand-500 mx-auto mb-1" />
+          <p className="text-2xl font-bold text-ink-900">{commitments.length}</p>
+          <p className="text-xs text-ink-400">Commitments</p>
+        </div>
       </div>
+
+      {followUpRecommendation && (
+        <div className="rounded-xl border border-brand-100 bg-brand-50/50 p-3 flex items-start gap-2.5">
+          <Clock className="h-4 w-4 text-brand-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-brand-800">
+              Recommended follow-up: {followUpRecommendation.minDays}–{followUpRecommendation.maxDays} days
+            </p>
+            <p className="text-xs text-brand-600 mt-0.5">
+              By {formatDate(followUpRecommendation.idealDate)} — based on {followUpRecommendation.reasonLabel}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1235,6 +1529,8 @@ function MomStep({
   discoveryNotes,
   capturedIssues,
   capturedOpps,
+  commitments,
+  nextMeeting,
   momGenerated,
   setMomGenerated,
 }: {
@@ -1245,6 +1541,8 @@ function MomStep({
   discoveryNotes: string;
   capturedIssues: Issue[];
   capturedOpps: Opportunity[];
+  commitments: { id: string; task: string; owner: string; dueDate: string }[];
+  nextMeeting: { date: string; time: string; durationMins: number; type: CalendarType; mode: MeetingMode; purpose: string };
   momGenerated: MomSummary | null;
   setMomGenerated: (m: MomSummary | null) => void;
 }) {
@@ -1258,7 +1556,10 @@ function MomStep({
     const decisions: string[] = [];
     if (summary) decisions.push(summary);
 
+    // Commitments made during the call are the primary source of action items,
+    // topped up with follow-ups implied by any issue/opportunity captured this call.
     const actionItems = [
+      ...commitments.map((c) => ({ id: genId('act'), task: c.task, owner: c.owner, dueDate: c.dueDate, done: false })),
       ...capturedIssues.map((iss) => ({
         id: genId('act'),
         task: `Resolve: ${iss.title}`,
@@ -1286,6 +1587,11 @@ function MomStep({
       actionItems,
       createdBy: owner,
       createdAt: now,
+      customerFacingSummary: buildCustomerFacingSummary({
+        subject: subject || `interaction with ${account.name}`,
+        commitments,
+        nextMeeting: nextMeeting.date ? nextMeeting : null,
+      }),
     };
     setMomGenerated(mom);
   };
@@ -1294,7 +1600,7 @@ function MomStep({
     <div className="space-y-5">
       <div>
         <h2 className="text-lg font-bold text-ink-900 mb-1">MOM Generation</h2>
-        <p className="text-sm text-ink-500">Auto-generate minutes of meeting</p>
+        <p className="text-sm text-ink-500">Auto-generate internal minutes and a customer-safe summary</p>
       </div>
 
       {!momGenerated ? (
@@ -1302,40 +1608,52 @@ function MomStep({
           <Sparkles className="h-5 w-5" /> Generate MOM
         </button>
       ) : (
-        <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50/50 p-4 space-y-4">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-            <p className="text-sm font-semibold text-emerald-700">MOM Generated</p>
-          </div>
-          <div>
-            <p className="font-semibold text-ink-900">{momGenerated.title}</p>
-            <p className="text-xs text-ink-400 mt-0.5">{formatDate(momGenerated.meetingDate)} · {momGenerated.attendees.join(', ')}</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-ink-400 uppercase mb-1">Agenda</p>
-            <ul className="space-y-0.5">
-              {momGenerated.agenda.map((a, i) => <li key={i} className="text-sm text-ink-600 flex items-start gap-2"><span className="text-ink-300">•</span> {a}</li>)}
-            </ul>
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-ink-400 uppercase mb-1">Decisions</p>
-            <ul className="space-y-0.5">
-              {momGenerated.decisions.map((d, i) => <li key={i} className="text-sm text-ink-600 flex items-start gap-2"><span className="text-emerald-500">✓</span> {d}</li>)}
-            </ul>
-          </div>
-          {momGenerated.actionItems.length > 0 && (
+        <div className="space-y-4">
+          <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50/50 p-4 space-y-4">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              <p className="text-sm font-semibold text-emerald-700">Internal MOM Generated</p>
+            </div>
             <div>
-              <p className="text-xs font-semibold text-ink-400 uppercase mb-1">Action Items ({momGenerated.actionItems.length})</p>
+              <p className="font-semibold text-ink-900">{momGenerated.title}</p>
+              <p className="text-xs text-ink-400 mt-0.5">{formatDate(momGenerated.meetingDate)} · {momGenerated.attendees.join(', ')}</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-ink-400 uppercase mb-1">Agenda</p>
               <ul className="space-y-0.5">
-                {momGenerated.actionItems.map((a) => (
-                  <li key={a.id} className="text-sm text-ink-600 flex items-start gap-2">
-                    <span className="text-ink-300">○</span>
-                    <span>{a.task} — <span className="text-xs text-ink-400">{a.owner} · {formatDate(a.dueDate)}</span></span>
-                  </li>
-                ))}
+                {momGenerated.agenda.map((a, i) => <li key={i} className="text-sm text-ink-600 flex items-start gap-2"><span className="text-ink-300">•</span> {a}</li>)}
               </ul>
             </div>
-          )}
+            <div>
+              <p className="text-xs font-semibold text-ink-400 uppercase mb-1">Decisions</p>
+              <ul className="space-y-0.5">
+                {momGenerated.decisions.map((d, i) => <li key={i} className="text-sm text-ink-600 flex items-start gap-2"><span className="text-emerald-500">✓</span> {d}</li>)}
+              </ul>
+            </div>
+            {momGenerated.actionItems.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-ink-400 uppercase mb-1">Action Items ({momGenerated.actionItems.length})</p>
+                <ul className="space-y-0.5">
+                  {momGenerated.actionItems.map((a) => (
+                    <li key={a.id} className="text-sm text-ink-600 flex items-start gap-2">
+                      <span className="text-ink-300">○</span>
+                      <span>{a.task} — <span className="text-xs text-ink-400">{a.owner} · {formatDate(a.dueDate)}</span></span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-xl border-2 border-blue-200 bg-blue-50/50 p-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-blue-600" />
+              <p className="text-sm font-semibold text-blue-700">Customer-Facing Summary</p>
+            </div>
+            <p className="text-xs text-blue-500">Safe to share externally — internal risk, health, and accountability details are excluded.</p>
+            <p className="text-sm text-ink-700 whitespace-pre-line">{momGenerated.customerFacingSummary}</p>
+          </div>
+
           <button onClick={generate} className="text-xs text-brand-600 font-medium hover:text-brand-700">Regenerate</button>
         </div>
       )}
@@ -1348,11 +1666,21 @@ function ScheduleStep({
   contact,
   nextMeeting,
   setNextMeeting,
+  recommendation,
+  isSignificantlyLate,
+  lateSchedulingReason,
+  setLateSchedulingReason,
+  conflicts,
 }: {
   account: Account;
   contact: Contact | null;
   nextMeeting: { date: string; time: string; durationMins: number; type: CalendarType; mode: MeetingMode; purpose: string };
   setNextMeeting: React.Dispatch<React.SetStateAction<{ date: string; time: string; durationMins: number; type: CalendarType; mode: MeetingMode; purpose: string }>>;
+  recommendation: FollowUpRecommendation | null;
+  isSignificantlyLate: boolean;
+  lateSchedulingReason: string;
+  setLateSchedulingReason: (v: string) => void;
+  conflicts: CalendarRecord[];
 }) {
   const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
   const nextWeek = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
@@ -1364,6 +1692,18 @@ function ScheduleStep({
         <p className="text-sm text-ink-500">{account.name} · {contact?.name || 'No contact'}</p>
       </div>
 
+      {recommendation && (
+        <div className="rounded-xl border border-brand-100 bg-brand-50/50 p-3 flex items-start gap-2.5">
+          <Clock className="h-4 w-4 text-brand-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-brand-800">
+              Recommended: within {recommendation.minDays}–{recommendation.maxDays} days (by {formatDate(recommendation.idealDate)})
+            </p>
+            <p className="text-xs text-brand-600 mt-0.5">Based on {recommendation.reasonLabel}</p>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-4">
         {/* Quick date buttons */}
         <div>
@@ -1371,6 +1711,9 @@ function ScheduleStep({
           <div className="flex gap-2 mb-2">
             <button onClick={() => setNextMeeting((p) => ({ ...p, date: tomorrow }))} className="px-3 py-2 rounded-lg border-2 border-ink-200 text-sm font-medium hover:border-brand-400 transition">Tomorrow</button>
             <button onClick={() => setNextMeeting((p) => ({ ...p, date: nextWeek }))} className="px-3 py-2 rounded-lg border-2 border-ink-200 text-sm font-medium hover:border-brand-400 transition">Next Week</button>
+            {recommendation && (
+              <button onClick={() => setNextMeeting((p) => ({ ...p, date: recommendation.idealDate }))} className="px-3 py-2 rounded-lg border-2 border-brand-300 bg-brand-50 text-brand-700 text-sm font-medium hover:border-brand-400 transition">Recommended</button>
+            )}
           </div>
           <input type="date" value={nextMeeting.date} onChange={(e) => setNextMeeting((p) => ({ ...p, date: e.target.value }))} className="input" />
         </div>
@@ -1421,6 +1764,38 @@ function ScheduleStep({
             <p className="text-sm text-brand-700">
               {formatDate(nextMeeting.date)} at {nextMeeting.time} · {nextMeeting.durationMins}m · {nextMeeting.mode}
             </p>
+          </div>
+        )}
+
+        {conflicts.length > 0 && (
+          <div className="rounded-lg bg-red-50 border border-red-200 p-3 space-y-1.5">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
+              <p className="text-sm font-medium text-red-800">Scheduling conflict — this overlaps {conflicts.length} other meeting{conflicts.length > 1 ? 's' : ''}:</p>
+            </div>
+            <ul className="pl-6 space-y-0.5">
+              {conflicts.map((c) => (
+                <li key={c.id} className="text-xs text-red-700">{c.title} · {c.time} ({c.durationMins}m) · {c.owner}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {isSignificantlyLate && (
+          <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 space-y-2">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+              <p className="text-sm text-amber-800">
+                This is significantly later than the recommended window. A reason is required to proceed.
+              </p>
+            </div>
+            <textarea
+              value={lateSchedulingReason}
+              onChange={(e) => setLateSchedulingReason(e.target.value)}
+              placeholder="Why is the next meeting being scheduled this far out?"
+              rows={2}
+              className="input resize-none"
+            />
           </div>
         )}
 

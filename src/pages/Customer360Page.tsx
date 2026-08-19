@@ -6,8 +6,10 @@ import { Badge } from '@/components/ui/Badge';
 import { AccountAvatar } from '@/components/ui/Avatar';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { VerificationBadge } from '@/components/trust/VerificationBadge';
 import { formatDate } from '@/utils/format';
 import { Users, ArrowRight, TrendingUp, Minus, TrendingDown } from 'lucide-react';
+import type { Customer360, VerificationStatus } from '@/types/models';
 
 interface Customer360PageProps {
   onNavigate: (path: string) => void;
@@ -15,6 +17,16 @@ interface Customer360PageProps {
 
 const trendIcon = { up: TrendingUp, stable: Minus, down: TrendingDown };
 const trendTone = { up: 'green', stable: 'amber', down: 'red' } as const;
+
+function overallVerification(c360: Customer360): { status: VerificationStatus; verifiedCount: number } {
+  const statuses = [c360.fieldMeta.legalName.verificationStatus, c360.fieldMeta.gst.verificationStatus, c360.fieldMeta.pan.verificationStatus];
+  const status: VerificationStatus = statuses.includes('Unverified')
+    ? 'Unverified'
+    : statuses.includes('Pending Verification')
+      ? 'Pending Verification'
+      : 'Verified';
+  return { status, verifiedCount: statuses.filter((s) => s === 'Verified').length };
+}
 
 export function Customer360Page({ onNavigate }: Customer360PageProps) {
   const { data } = useStore();
@@ -52,6 +64,10 @@ export function Customer360Page({ onNavigate }: Customer360PageProps) {
                   </div>
                 </CardHeader>
                 <CardBody className="space-y-4">
+                  <div className="flex items-center justify-between gap-2 -mt-1">
+                    <p className="text-xs text-ink-500 truncate">{c360.legalName}</p>
+                    <VerificationBadge status={overallVerification(c360).status} />
+                  </div>
                   <p className="text-sm text-ink-600 leading-relaxed line-clamp-3">{c360.overview}</p>
 
                   <div className="grid grid-cols-3 gap-3">

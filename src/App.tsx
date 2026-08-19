@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { StoreProvider } from '@/store/StoreContext';
+import { ToastProvider } from '@/components/ui/ToastProvider';
 import { Layout } from '@/components/layout/Layout';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { AccountsPage } from '@/pages/AccountsPage';
@@ -82,9 +83,11 @@ function App() {
 
   return (
     <StoreProvider>
-      <Layout activePath={path} onNavigate={navigate}>
-        {renderPage()}
-      </Layout>
+      <ToastProvider>
+        <Layout activePath={path} onNavigate={navigate}>
+          {renderPage()}
+        </Layout>
+      </ToastProvider>
     </StoreProvider>
   );
 }

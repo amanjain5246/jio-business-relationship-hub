@@ -1,4 +1,16 @@
-import type { AppData } from '@/types/models';
+import type { AppData, FieldMetadata } from '@/types/models';
+
+function verified(source: string, date: string): FieldMetadata {
+  return { source, lastUpdatedAt: date, verificationStatus: 'Verified' };
+}
+
+function pendingVerification(source: string, date: string): FieldMetadata {
+  return { source, lastUpdatedAt: date, verificationStatus: 'Pending Verification' };
+}
+
+function unverified(source: string, date: string): FieldMetadata {
+  return { source, lastUpdatedAt: date, verificationStatus: 'Unverified' };
+}
 
 export const SEED_DATA: AppData = {
   accounts: [
@@ -178,6 +190,15 @@ export const SEED_DATA: AppData = {
       ],
       keyRisks: ['Budget freeze in Q3 may delay private 5G expansion'],
       strategicInitiatives: ['Joint innovation lab for AI/ML at edge', 'Co-marketing for digital transformation case study'],
+      history: [],
+      legalName: 'Reliance Industries Limited',
+      gst: '27AAACR5055K1Z3',
+      pan: 'AAACR5055K',
+      fieldMeta: {
+        legalName: verified('KYC Onboarding', '2022-04-01T09:00:00'),
+        gst: verified('KYC Onboarding', '2022-04-01T09:00:00'),
+        pan: verified('KYC Onboarding', '2022-04-01T09:00:00'),
+      },
     },
     {
       accountId: 'acc-002',
@@ -197,6 +218,15 @@ export const SEED_DATA: AppData = {
       ],
       keyRisks: ['3 open P1 network issues', 'Competitor actively pitching', 'Renewal in 5 months with low sentiment'],
       strategicInitiatives: ['Propose managed network services upgrade', 'Executive escalation to CIO'],
+      history: [],
+      legalName: 'Tata Motors Limited',
+      gst: '27AAACT2727Q1ZW',
+      pan: 'AAACT2727Q',
+      fieldMeta: {
+        legalName: verified('KYC Onboarding', '2023-01-15T09:00:00'),
+        gst: pendingVerification('RM Update', '2026-08-15T10:00:00'),
+        pan: verified('KYC Onboarding', '2023-01-15T09:00:00'),
+      },
     },
     {
       accountId: 'acc-003',
@@ -216,6 +246,15 @@ export const SEED_DATA: AppData = {
       ],
       keyRisks: ['Procurement process slow for SD-WAN expansion'],
       strategicInitiatives: ['Joint go-to-market for managed services', 'Annual innovation summit sponsorship'],
+      history: [],
+      legalName: 'Infosys Limited',
+      gst: '29AAACI4741P1ZW',
+      pan: 'AAACI4741P',
+      fieldMeta: {
+        legalName: verified('KYC Onboarding', '2021-09-01T09:00:00'),
+        gst: verified('KYC Onboarding', '2021-09-01T09:00:00'),
+        pan: verified('KYC Onboarding', '2021-09-01T09:00:00'),
+      },
     },
     {
       accountId: 'acc-004',
@@ -235,6 +274,15 @@ export const SEED_DATA: AppData = {
       ],
       keyRisks: ['5 open issues including 2 P1', 'Contract renewal in 4 months', 'Champion departed 3 months ago', 'Competitor pilot underway'],
       strategicInitiatives: ['Immediate executive escalation', 'Dedicated resolution squad', 'Goodwill credit proposal'],
+      history: [],
+      legalName: 'Asian Paints Limited',
+      gst: '27AAACA0796D1Z2',
+      pan: 'AAACA0796D',
+      fieldMeta: {
+        legalName: verified('KYC Onboarding', '2020-06-01T09:00:00'),
+        gst: verified('KYC Onboarding', '2020-06-01T09:00:00'),
+        pan: unverified('Legacy Data Migration', '2020-06-01T09:00:00'),
+      },
     },
     {
       accountId: 'acc-005',
@@ -254,6 +302,15 @@ export const SEED_DATA: AppData = {
       ],
       keyRisks: ['Regulatory changes may impact interconnect terms', '2 open issues on capacity'],
       strategicInitiatives: ['Joint rural connectivity program', '5G mutual roaming pilot'],
+      history: [],
+      legalName: 'Bharti Airtel Limited',
+      gst: '07AAACB2894G1Z9',
+      pan: 'AAACB2894G',
+      fieldMeta: {
+        legalName: verified('KYC Onboarding', '2021-11-01T09:00:00'),
+        gst: verified('KYC Onboarding', '2021-11-01T09:00:00'),
+        pan: verified('KYC Onboarding', '2021-11-01T09:00:00'),
+      },
     },
     {
       accountId: 'acc-006',
@@ -273,6 +330,15 @@ export const SEED_DATA: AppData = {
       ],
       keyRisks: ['Budget approval cycle for branch expansion is 3 months'],
       strategicInitiatives: ['Compliance-first managed security bundle', 'Co-branded financial services connectivity'],
+      history: [],
+      legalName: 'HDFC Bank Limited',
+      gst: '27AAACH2702H1ZM',
+      pan: 'AAACH2702H',
+      fieldMeta: {
+        legalName: verified('KYC Onboarding', '2021-02-01T09:00:00'),
+        gst: verified('KYC Onboarding', '2021-02-01T09:00:00'),
+        pan: verified('KYC Onboarding', '2021-02-01T09:00:00'),
+      },
     },
     {
       accountId: 'acc-007',
@@ -292,6 +358,15 @@ export const SEED_DATA: AppData = {
       ],
       keyRisks: ['Aggressive timeline may strain delivery'],
       strategicInitiatives: ['Joint case study on edge-driven e-commerce', 'Volume discount for multi-year commit'],
+      history: [],
+      legalName: 'Flipkart Internet Private Limited',
+      gst: '29AABCF6109Q1ZR',
+      pan: 'AABCF6109Q',
+      fieldMeta: {
+        legalName: verified('KYC Onboarding', '2024-02-01T09:00:00'),
+        gst: verified('KYC Onboarding', '2024-02-01T09:00:00'),
+        pan: verified('KYC Onboarding', '2024-02-01T09:00:00'),
+      },
     },
     {
       accountId: 'acc-008',
@@ -311,6 +386,15 @@ export const SEED_DATA: AppData = {
       ],
       keyRisks: ['4 open issues, 1 P1', 'Contract expires in 2 months', 'No engagement for 17 days', 'Competitor evaluating'],
       strategicInitiatives: ['Emergency escalation', 'Contract extension proposal with remediation plan'],
+      history: [],
+      legalName: 'Adani Power Limited',
+      gst: '24AABCA8493R1ZQ',
+      pan: 'AABCA8493R',
+      fieldMeta: {
+        legalName: unverified('Legacy Data Migration', '2019-11-01T09:00:00'),
+        gst: verified('KYC Onboarding', '2019-11-01T09:00:00'),
+        pan: verified('KYC Onboarding', '2019-11-01T09:00:00'),
+      },
     },
   ],
   interactions: [
@@ -377,11 +461,72 @@ export const SEED_DATA: AppData = {
     { id: 'not-010', type: 'System', title: 'Weekly account health review', message: '2 accounts moved to Red, 1 to Amber. Review recommended.', accountId: null, createdAt: '2026-08-18T06:00:00', read: false, priority: 'low' },
   ],
   updateRequests: [
-    { id: 'upd-001', accountId: 'acc-002', field: 'ARR', currentValue: '2340', requestedValue: '2100', reason: 'Customer negotiated 10% reduction due to network issues. Reflects amended contract terms.', requestedBy: 'Priya Sharma', requestedAt: '2026-08-15', status: 'Pending', reviewedBy: null, reviewedAt: null },
-    { id: 'upd-002', accountId: 'acc-004', field: 'Relationship Manager', currentValue: 'Rohan Gupta', requestedValue: 'Sneha Patel', reason: 'Rohan transitioning to strategic accounts. Sneha has energy/manufacturing experience for at-risk recovery.', requestedBy: 'Arjun Mehta', requestedAt: '2026-08-12', status: 'Approved', reviewedBy: 'Leadership', reviewedAt: '2026-08-13' },
-    { id: 'upd-003', accountId: 'acc-008', field: 'Health', currentValue: 'red', requestedValue: 'red', reason: 'Confirming red status. 4 open issues, contract expiring, no engagement for 17 days.', requestedBy: 'Sneha Patel', requestedAt: '2026-08-16', status: 'Approved', reviewedBy: 'Leadership', reviewedAt: '2026-08-16' },
-    { id: 'upd-004', accountId: 'acc-001', field: 'ARR', currentValue: '4850', requestedValue: '5700', reason: 'Private 5G Phase 2 contract signed. Upsell value 850 lakhs added to ARR.', requestedBy: 'Arjun Mehta', requestedAt: '2026-08-14', status: 'Action Required', reviewedBy: null, reviewedAt: null },
-    { id: 'upd-005', accountId: 'acc-003', field: 'Segment', currentValue: 'Strategic', requestedValue: 'Strategic', reason: 'Reaffirming strategic status with expanded SD-WAN and Cyber Shield footprint.', requestedBy: 'Arjun Mehta', requestedAt: '2026-08-16', status: 'Pending', reviewedBy: null, reviewedAt: null },
+    {
+      id: 'upd-001', accountId: 'acc-002', field: 'ARR', currentValue: '2340', requestedValue: '2100',
+      reason: 'Customer negotiated 10% reduction due to network issues. Reflects amended contract terms.',
+      requestedBy: 'Priya Sharma', requestedAt: '2026-08-15', status: 'Pending', reviewedBy: null, reviewedAt: null,
+      attachment: null, clarificationNote: null, customerNotifiedAt: null, urmNotifiedAt: null,
+      auditTrail: [
+        { id: 'aud-001', actor: 'Priya Sharma', action: 'Submitted', detail: 'Update request submitted for review.', timestamp: '2026-08-15T09:00:00' },
+      ],
+    },
+    {
+      id: 'upd-002', accountId: 'acc-004', field: 'Relationship Manager', currentValue: 'Rohan Gupta', requestedValue: 'Sneha Patel',
+      reason: 'Rohan transitioning to strategic accounts. Sneha has energy/manufacturing experience for at-risk recovery.',
+      requestedBy: 'Arjun Mehta', requestedAt: '2026-08-12', status: 'Approved', reviewedBy: 'Leadership', reviewedAt: '2026-08-13',
+      attachment: null, clarificationNote: null, customerNotifiedAt: '2026-08-13T10:00:00', urmNotifiedAt: '2026-08-13T10:00:00',
+      auditTrail: [
+        { id: 'aud-002', actor: 'Arjun Mehta', action: 'Submitted', detail: 'Update request submitted for review.', timestamp: '2026-08-12T09:00:00' },
+        { id: 'aud-003', actor: 'Leadership', action: 'Approved', detail: 'Relationship Manager update approved by Leadership.', timestamp: '2026-08-13T10:00:00' },
+        { id: 'aud-004', actor: 'System', action: 'Customer Notified', detail: 'Customer notified (simulated) that their Relationship Manager update request was approved.', timestamp: '2026-08-13T10:00:00' },
+        { id: 'aud-005', actor: 'System', action: 'URM Notified', detail: 'URM notified (simulated) of the approved decision on Relationship Manager.', timestamp: '2026-08-13T10:00:00' },
+      ],
+    },
+    {
+      id: 'upd-003', accountId: 'acc-008', field: 'Health', currentValue: 'red', requestedValue: 'red',
+      reason: 'Confirming red status. 4 open issues, contract expiring, no engagement for 17 days.',
+      requestedBy: 'Sneha Patel', requestedAt: '2026-08-16', status: 'Approved', reviewedBy: 'Leadership', reviewedAt: '2026-08-16',
+      attachment: null, clarificationNote: null, customerNotifiedAt: '2026-08-16T15:00:00', urmNotifiedAt: '2026-08-16T15:00:00',
+      auditTrail: [
+        { id: 'aud-006', actor: 'Sneha Patel', action: 'Submitted', detail: 'Update request submitted for review.', timestamp: '2026-08-16T09:00:00' },
+        { id: 'aud-007', actor: 'Leadership', action: 'Approved', detail: 'Health status confirmation approved by Leadership.', timestamp: '2026-08-16T15:00:00' },
+        { id: 'aud-008', actor: 'System', action: 'Customer Notified', detail: 'Customer notified (simulated) that their Health update request was approved.', timestamp: '2026-08-16T15:00:00' },
+        { id: 'aud-009', actor: 'System', action: 'URM Notified', detail: 'URM notified (simulated) of the approved decision on Health.', timestamp: '2026-08-16T15:00:00' },
+      ],
+    },
+    {
+      id: 'upd-004', accountId: 'acc-001', field: 'ARR', currentValue: '4850', requestedValue: '5700',
+      reason: 'Private 5G Phase 2 contract signed. Upsell value 850 lakhs added to ARR.',
+      requestedBy: 'Arjun Mehta', requestedAt: '2026-08-14', status: 'Action Required', reviewedBy: 'Leadership', reviewedAt: '2026-08-15',
+      attachment: null,
+      clarificationNote: 'Please attach the signed Phase 2 contract addendum confirming the revised ARR figure before this can be approved.',
+      customerNotifiedAt: '2026-08-15T11:00:00', urmNotifiedAt: '2026-08-15T11:00:00',
+      auditTrail: [
+        { id: 'aud-010', actor: 'Arjun Mehta', action: 'Submitted', detail: 'Update request submitted for review.', timestamp: '2026-08-14T09:00:00' },
+        { id: 'aud-011', actor: 'Leadership', action: 'Action Required', detail: 'Please attach the signed Phase 2 contract addendum confirming the revised ARR figure before this can be approved.', timestamp: '2026-08-15T11:00:00' },
+        { id: 'aud-012', actor: 'System', action: 'Customer Notified', detail: 'Customer notified (simulated) that their ARR update request was action required.', timestamp: '2026-08-15T11:00:00' },
+        { id: 'aud-013', actor: 'System', action: 'URM Notified', detail: 'URM notified (simulated) of the action required decision on ARR.', timestamp: '2026-08-15T11:00:00' },
+      ],
+    },
+    {
+      id: 'upd-005', accountId: 'acc-003', field: 'Segment', currentValue: 'Strategic', requestedValue: 'Strategic',
+      reason: 'Reaffirming strategic status with expanded SD-WAN and Cyber Shield footprint.',
+      requestedBy: 'Arjun Mehta', requestedAt: '2026-08-16', status: 'Pending', reviewedBy: null, reviewedAt: null,
+      attachment: null, clarificationNote: null, customerNotifiedAt: null, urmNotifiedAt: null,
+      auditTrail: [
+        { id: 'aud-014', actor: 'Arjun Mehta', action: 'Submitted', detail: 'Update request submitted for review.', timestamp: '2026-08-16T09:00:00' },
+      ],
+    },
+    {
+      id: 'upd-006', accountId: 'acc-002', field: 'GST', currentValue: '27AAACT2727Q1ZW', requestedValue: '27AAACT2727Q1Z5',
+      reason: 'Checksum digit was incorrectly captured during onboarding. Customer provided a corrected GST certificate for verification.',
+      requestedBy: 'Priya Sharma', requestedAt: '2026-08-15', status: 'Pending', reviewedBy: null, reviewedAt: null,
+      attachment: { name: 'gst_certificate_corrected.pdf', kind: 'PDF', sizeKb: 482 },
+      clarificationNote: null, customerNotifiedAt: null, urmNotifiedAt: null,
+      auditTrail: [
+        { id: 'aud-015', actor: 'Priya Sharma', action: 'Submitted', detail: 'GST correction request submitted with supporting certificate for verification.', timestamp: '2026-08-15T10:00:00' },
+      ],
+    },
   ],
   accountabilityEvents: [
     { id: 'acc-evt-001', accountId: 'acc-004', type: 'RM Change', title: 'RM reassigned for at-risk recovery', description: 'Rohan Gupta transitioned out. Sneha Patel assigned as new RM for Asian Paints to lead recovery effort.', actor: 'Arjun Mehta', date: '2026-08-13', impact: 'High' },
@@ -423,6 +568,7 @@ export const SEED_DATA: AppData = {
       ],
       createdBy: 'Arjun Mehta',
       createdAt: '2026-08-14',
+      customerFacingSummary: 'Thank you for taking the time to discuss "Private 5G roadmap discussion".\nHere is a summary of what we agreed to take forward:\n• Prepare technical workshop agenda and share with refinery IT team (by 20 Aug 2026)\n• Share Phase 2 cost-benefit analysis (by 25 Aug 2026)\n• Confirm refinery site readiness checklist (by 30 Aug 2026)\nWe\'ve scheduled our next check-in on 22 Aug 2026 to discuss the Phase 2 technical workshop.\nPlease reach out to your relationship manager with any questions in the meantime.',
     },
     {
       id: 'mom-002',
@@ -439,6 +585,7 @@ export const SEED_DATA: AppData = {
       ],
       createdBy: 'Arjun Mehta',
       createdAt: '2026-08-16',
+      customerFacingSummary: 'Thank you for taking the time to discuss "SD-WAN expansion QBR".\nHere is a summary of what we agreed to take forward:\n• Send revised SD-WAN proposal for 50 sites (by 20 Aug 2026)\n• Prepare innovation summit sponsorship deck (by 01 Sep 2026)\nPlease reach out to your relationship manager with any questions in the meantime.',
     },
     {
       id: 'mom-003',
@@ -455,6 +602,7 @@ export const SEED_DATA: AppData = {
       ],
       createdBy: 'Priya Sharma',
       createdAt: '2026-08-10',
+      customerFacingSummary: 'Thank you for taking the time to discuss network service continuity at the Pune plant.\nHere is a summary of what we agreed to take forward:\n• Deliver 48-hour resolution plan for Pune outages (by 12 Aug 2026)\n• Set up recurring Tuesday status call (by 13 Aug 2026)\nPlease reach out to your relationship manager with any questions in the meantime.',
     },
   ],
   schedulingHistory: [
@@ -462,5 +610,43 @@ export const SEED_DATA: AppData = {
     { id: 'sch-002', calendarId: 'cal-002', action: 'Scheduled', newDate: '2026-08-20', newTime: '14:00', actor: 'Priya Sharma', timestamp: '2026-08-10T15:00:00' },
     { id: 'sch-003', calendarId: 'cal-004', action: 'Scheduled', newDate: '2026-08-19', newTime: '15:00', actor: 'Sneha Patel', timestamp: '2026-08-12T09:00:00' },
     { id: 'sch-004', calendarId: 'cal-005', action: 'Rescheduled', oldDate: '2026-08-18', oldTime: '11:00', newDate: '2026-08-21', newTime: '11:00', reason: 'Contact unavailable on original date', actor: 'Sneha Patel', timestamp: '2026-08-16T10:00:00' },
+  ],
+  discoverySessions: [
+    {
+      id: 'disc-001',
+      accountId: 'acc-002',
+      contactId: 'con-003',
+      conductedBy: 'Priya Sharma',
+      date: '2026-07-25T11:00:00',
+      interactionType: 'Repeat Interaction',
+      whatChangedSinceLast: 'Outage frequency increased since last quarter; VP Digital now personally tracking resolution.',
+      experienceRating: 'Dissatisfied',
+      isDissatisfied: true,
+      dissatisfactionReasons: ['Network reliability', 'Support responsiveness'],
+      dissatisfactionDetails: 'Recurring outages at Pune plant are affecting production scheduling. Customer wants a firm resolution timeline.',
+      awareOfCustomerCare: true,
+      customerCareFeedback: 'Aware of the support line but frustrated by repeat tickets for the same issue.',
+      businessGrowthPlans: 'Expanding IoT connectivity to 50,000 vehicles over the next two quarters.',
+      expansionPotential: 'Medium',
+      productNeedIdentified: true,
+      productOpportunityNotes: 'Interested in a managed network services upgrade to reduce recurring downtime.',
+      interestedProducts: ['Managed Services'],
+      usingCompetitor: true,
+      competitorNames: ['Airtel Business'],
+      competitorNotes: 'Competitor has been pitching a managed services bundle directly to the VP.',
+      advocacyStance: 'Passive',
+      willingToBeReference: false,
+      painPoints: ['Recurring network downtime at Pune plant', 'Billing discrepancy on enterprise fiber'],
+      stakeholders: [
+        { id: 'dstk-001', contactId: 'con-003', name: 'Rajiv Menon', role: 'VP Digital Transformation', isNewStakeholder: false },
+      ],
+      contractAware: true,
+      contractConcerns: 'Renewal in 5 months; sentiment is low and needs to improve before renewal conversation.',
+      keyFindings: 'Account is at risk due to recurring network issues. Customer is evaluating a competitor. Strong interest in managed network services as a resolution path.',
+      linkedIssueIds: ['iss-002'],
+      linkedOpportunityIds: ['opp-005'],
+      customer360FieldsUpdated: ['satisfactionScore', 'engagementTrend', 'keyRisks'],
+      createdAt: '2026-07-25T11:45:00',
+    },
   ],
 };

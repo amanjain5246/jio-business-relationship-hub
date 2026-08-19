@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useStore } from '@/store/StoreContext';
-import { Bell, Search, Monitor, Smartphone, Menu, RotateCcw, Check } from 'lucide-react';
+import { Bell, Search, Monitor, Smartphone, Menu, RotateCcw, Check, Building2, AlertTriangle, TrendingUp, X } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { relativeTime } from '@/utils/format';
 import { NAV_ITEMS } from '@/config/navigation';
@@ -25,12 +25,35 @@ export function TopBar({ onNavigate, onToggleMobileNav }: TopBarProps) {
   const { data, viewMode, setViewMode, markNotificationRead, markAllNotificationsRead, resetData } = useStore();
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
+  const [query, setQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
 
   const unread = data.notifications.filter((n) => !n.read);
+
+  const searchResults = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return { accounts: [], issues: [], opportunities: [] };
+    return {
+      accounts: data.accounts.filter((a) => a.name.toLowerCase().includes(q) || a.industry.toLowerCase().includes(q)).slice(0, 4),
+      issues: data.issues.filter((i) => i.title.toLowerCase().includes(q)).slice(0, 4),
+      opportunities: data.opportunities.filter((o) => o.name.toLowerCase().includes(q)).slice(0, 4),
+    };
+  }, [query, data.accounts, data.issues, data.opportunities]);
+  const hasResults = searchResults.accounts.length + searchResults.issues.length + searchResults.opportunities.length > 0;
+
+  const goToAccount = (accountId: string) => {
+    onNavigate(`/accounts/${accountId}`);
+    setSearchOpen(false);
+    setQuery('');
+  };
 
   const handleClickOutside = useCallback((e: MouseEvent) => {
     if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
       setNotifOpen(false);
+    }
+    if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+      setSearchOpen(false);
     }
   }, []);
 
@@ -50,13 +73,76 @@ export function TopBar({ onNavigate, onToggleMobileNav }: TopBarProps) {
           <Menu className="h-5 w-5" />
         </button>
 
-        <div className="relative max-w-md w-full hidden sm:block">
+        <div className="relative max-w-md w-full hidden sm:block" ref={searchRef}>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-400" />
           <input
             type="text"
             placeholder="Search accounts, issues, opportunities..."
-            className="w-full pl-9 pr-4 py-2 text-sm bg-ink-50 border border-transparent rounded-lg focus:bg-white focus:border-ink-200 focus:outline-none transition"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setSearchOpen(true);
+            }}
+            onFocus={() => setSearchOpen(true)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') { setSearchOpen(false); (e.target as HTMLInputElement).blur(); }
+            }}
+            className="w-full pl-9 pr-9 py-2 text-sm bg-ink-50 border border-transparent rounded-lg focus:bg-white focus:border-ink-200 focus:outline-none transition"
           />
+          {query && (
+            <button
+              onClick={() => { setQuery(''); setSearchOpen(false); }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-ink-400 hover:text-ink-700 hover:bg-ink-100 transition"
+              aria-label="Clear search"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+
+          {searchOpen && query.trim() && (
+            <div className="absolute left-0 top-full mt-2 w-full bg-white rounded-xl shadow-pop border border-ink-200 animate-scale-in z-50 overflow-hidden max-h-96 overflow-y-auto">
+              {!hasResults ? (
+                <div className="px-4 py-6 text-center text-sm text-ink-400">No matches for "{query}"</div>
+              ) : (
+                <>
+                  {searchResults.accounts.length > 0 && (
+                    <div className="py-1.5">
+                      <p className="px-4 py-1 text-[11px] font-semibold text-ink-400 uppercase tracking-wide">Accounts</p>
+                      {searchResults.accounts.map((a) => (
+                        <button key={a.id} onClick={() => goToAccount(a.id)} className="w-full flex items-center gap-2.5 px-4 py-2 text-left hover:bg-ink-50 transition">
+                          <Building2 className="h-3.5 w-3.5 text-ink-400 shrink-0" />
+                          <span className="text-sm text-ink-800 truncate">{a.name}</span>
+                          <span className="text-xs text-ink-400 shrink-0">{a.industry}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {searchResults.issues.length > 0 && (
+                    <div className="py-1.5 border-t border-ink-100">
+                      <p className="px-4 py-1 text-[11px] font-semibold text-ink-400 uppercase tracking-wide">Issues</p>
+                      {searchResults.issues.map((i) => (
+                        <button key={i.id} onClick={() => goToAccount(i.accountId)} className="w-full flex items-center gap-2.5 px-4 py-2 text-left hover:bg-ink-50 transition">
+                          <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                          <span className="text-sm text-ink-800 truncate">{i.title}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {searchResults.opportunities.length > 0 && (
+                    <div className="py-1.5 border-t border-ink-100">
+                      <p className="px-4 py-1 text-[11px] font-semibold text-ink-400 uppercase tracking-wide">Opportunities</p>
+                      {searchResults.opportunities.map((o) => (
+                        <button key={o.id} onClick={() => goToAccount(o.accountId)} className="w-full flex items-center gap-2.5 px-4 py-2 text-left hover:bg-ink-50 transition">
+                          <TrendingUp className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                          <span className="text-sm text-ink-800 truncate">{o.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

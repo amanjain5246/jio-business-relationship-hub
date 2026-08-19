@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/Badge';
 import { AccountAvatar } from '@/components/ui/Avatar';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatINR, formatDate, daysUntil } from '@/utils/format';
+import { openIssueCount, openOpportunityCount, contactCount } from '@/utils/accountStats';
 import { Building2, Search, Filter } from 'lucide-react';
 import type { AccountHealth } from '@/types/models';
 
@@ -70,6 +71,9 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((acc) => {
             const renewalDays = daysUntil(acc.contractRenewal);
+            const issuesCount = openIssueCount(data, acc.id);
+            const oppsCount = openOpportunityCount(data, acc.id);
+            const contactsN = contactCount(data, acc.id);
             return (
               <Card key={acc.id} hover onClick={() => onNavigate(`/accounts/${acc.id}`)}>
                 <CardBody className="space-y-4">
@@ -95,20 +99,20 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                     </div>
                     <div>
                       <p className="text-[11px] text-ink-400 font-medium uppercase tracking-wide">Open Issues</p>
-                      <p className={`text-sm font-semibold mt-0.5 ${acc.openIssues > 2 ? 'text-red-600' : acc.openIssues > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                        {acc.openIssues}
+                      <p className={`text-sm font-semibold mt-0.5 ${issuesCount > 2 ? 'text-red-600' : issuesCount > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                        {issuesCount}
                       </p>
                     </div>
                     <div>
                       <p className="text-[11px] text-ink-400 font-medium uppercase tracking-wide">Opportunities</p>
-                      <p className="text-sm font-semibold text-ink-900 mt-0.5">{acc.openOpportunities}</p>
+                      <p className="text-sm font-semibold text-ink-900 mt-0.5">{oppsCount}</p>
                     </div>
                   </div>
 
                   <div className="flex items-center justify-between pt-3 border-t border-ink-100">
                     <div className="flex items-center gap-2">
                       <Badge tone="neutral">{acc.hqCity}</Badge>
-                      <Badge tone="brand">{acc.contactsCount} contacts</Badge>
+                      <Badge tone="brand">{contactsN} contacts</Badge>
                     </div>
                     <Badge tone={renewalDays < 60 ? 'red' : renewalDays < 120 ? 'amber' : 'neutral'}>
                       Renewal {formatDate(acc.contractRenewal)}

@@ -34,6 +34,24 @@ export interface Contact {
   influence: 'Decision Maker' | 'Influencer' | 'Champion' | 'User';
 }
 
+export interface Customer360HistoryEntry {
+  id: ID;
+  field: string;
+  oldValue: string;
+  newValue: string;
+  changedAt: string; // ISO datetime
+  changedBy: string;
+  source: string;
+}
+
+export type VerificationStatus = 'Verified' | 'Unverified' | 'Pending Verification';
+
+export interface FieldMetadata {
+  source: string;
+  lastUpdatedAt: string; // ISO datetime
+  verificationStatus: VerificationStatus;
+}
+
 export interface Customer360 {
   accountId: ID;
   overview: string;
@@ -47,6 +65,16 @@ export interface Customer360 {
   revenueHistory: { quarter: string; value: number }[];
   keyRisks: string[];
   strategicInitiatives: string[];
+  history: Customer360HistoryEntry[];
+  // Trust-sensitive master data — not directly editable; changed only via an approved Update Request.
+  legalName: string;
+  gst: string;
+  pan: string;
+  fieldMeta: {
+    legalName: FieldMetadata;
+    gst: FieldMetadata;
+    pan: FieldMetadata;
+  };
 }
 
 export type InteractionChannel =
@@ -144,6 +172,22 @@ export interface NotificationItem {
 
 export type UpdateRequestStatus = 'Pending' | 'Approved' | 'Rejected' | 'Action Required';
 
+export type UpdateRequestAttachmentKind = 'Image' | 'PDF';
+
+export interface UpdateRequestAttachment {
+  name: string;
+  kind: UpdateRequestAttachmentKind;
+  sizeKb: number;
+}
+
+export interface UpdateRequestAuditEntry {
+  id: ID;
+  actor: string;
+  action: string;
+  detail: string;
+  timestamp: string; // ISO datetime
+}
+
 export interface UpdateRequest {
   id: ID;
   accountId: ID;
@@ -156,6 +200,11 @@ export interface UpdateRequest {
   status: UpdateRequestStatus;
   reviewedBy: string | null;
   reviewedAt: string | null;
+  attachment: UpdateRequestAttachment | null;
+  clarificationNote: string | null;
+  customerNotifiedAt: string | null;
+  urmNotifiedAt: string | null;
+  auditTrail: UpdateRequestAuditEntry[];
 }
 
 export type AccountabilityEventType =
@@ -165,7 +214,8 @@ export type AccountabilityEventType =
   | 'QBR Held'
   | 'Contract Signed'
   | 'Health Review'
-  | 'Site Visit';
+  | 'Site Visit'
+  | 'Interaction Logged';
 
 export interface AccountabilityEvent {
   id: ID;
@@ -239,6 +289,78 @@ export interface MomSummary {
   }[];
   createdBy: string;
   createdAt: string; // ISO date
+  // Sanitized recap safe to share with the customer — never includes internal
+  // risk, health, competitor, or accountability information.
+  customerFacingSummary: string;
+}
+
+export type DiscoveryInteractionType = 'First Interaction' | 'Repeat Interaction';
+
+export type CustomerExperienceRating =
+  | 'Very Satisfied'
+  | 'Satisfied'
+  | 'Neutral'
+  | 'Dissatisfied'
+  | 'Very Dissatisfied';
+
+export type AdvocacyStance = 'Promoter' | 'Passive' | 'Detractor';
+
+export type ExpansionPotential = 'High' | 'Medium' | 'Low' | 'None';
+
+export interface DiscoveryStakeholder {
+  id: ID;
+  contactId: ID | null;
+  name: string;
+  role: string;
+  isNewStakeholder: boolean;
+}
+
+export interface DiscoverySession {
+  id: ID;
+  accountId: ID;
+  contactId: ID | null;
+  conductedBy: string;
+  date: string; // ISO datetime
+
+  interactionType: DiscoveryInteractionType;
+  whatChangedSinceLast: string;
+
+  experienceRating: CustomerExperienceRating | null;
+  isDissatisfied: boolean;
+  dissatisfactionReasons: string[];
+  dissatisfactionDetails: string;
+
+  awareOfCustomerCare: boolean | null;
+  customerCareFeedback: string;
+
+  businessGrowthPlans: string;
+  expansionPotential: ExpansionPotential | null;
+
+  productNeedIdentified: boolean | null;
+  productOpportunityNotes: string;
+  interestedProducts: string[];
+
+  usingCompetitor: boolean | null;
+  competitorNames: string[];
+  competitorNotes: string;
+
+  advocacyStance: AdvocacyStance | null;
+  willingToBeReference: boolean | null;
+
+  painPoints: string[];
+
+  stakeholders: DiscoveryStakeholder[];
+
+  contractAware: boolean | null;
+  contractConcerns: string;
+
+  keyFindings: string;
+
+  linkedIssueIds: ID[];
+  linkedOpportunityIds: ID[];
+  customer360FieldsUpdated: string[];
+
+  createdAt: string; // ISO datetime
 }
 
 export interface AppData {
@@ -254,4 +376,5 @@ export interface AppData {
   calendar: CalendarRecord[];
   momSummaries: MomSummary[];
   schedulingHistory: SchedulingHistoryEntry[];
+  discoverySessions: DiscoverySession[];
 }

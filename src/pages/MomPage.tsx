@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatDate } from '@/utils/format';
-import { FileText, Check, ArrowRight } from 'lucide-react';
+import { FileText, Check, ArrowRight, ShieldCheck } from 'lucide-react';
 
 interface MomPageProps {
   onNavigate: (path: string) => void;
@@ -109,6 +109,17 @@ export function MomPage({ onNavigate }: MomPageProps) {
                       ))}
                     </ul>
                   </div>
+
+                  {/* Customer-Facing Summary */}
+                  {mom.customerFacingSummary && (
+                    <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3">
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
+                        <p className="text-xs font-medium text-blue-700 uppercase tracking-wide">Customer-Facing Summary</p>
+                      </div>
+                      <p className="text-sm text-ink-700 whitespace-pre-line">{mom.customerFacingSummary}</p>
+                    </div>
+                  )}
 
                   {/* Footer */}
                   <div className="flex items-center justify-between pt-3 border-t border-ink-100">

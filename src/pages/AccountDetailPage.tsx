@@ -8,6 +8,9 @@ import { AccountAvatar, Avatar } from '@/components/ui/Avatar';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { Modal } from '@/components/ui/Modal';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { GuidedDiscoveryFlow } from '@/components/discovery/GuidedDiscoveryFlow';
+import { VerificationBadge } from '@/components/trust/VerificationBadge';
+import { AccountUpdateRequestModal } from '@/components/trust/AccountUpdateRequestModal';
 import { formatINR, formatDate, daysUntil, relativeTime } from '@/utils/format';
 import type { AccountHealth } from '@/types/models';
 import {
@@ -25,6 +28,11 @@ import {
   Users,
   IndianRupee,
   Save,
+  Sparkles,
+  Clock,
+  Lock,
+  History,
+  Paperclip,
 } from 'lucide-react';
 
 interface AccountDetailPageProps {
@@ -32,7 +40,7 @@ interface AccountDetailPageProps {
   onNavigate: (path: string) => void;
 }
 
-type Tab = 'overview' | 'interactions' | 'issues' | 'opportunities' | 'calendar' | 'accountability' | 'mom';
+type Tab = 'overview' | 'interactions' | 'issues' | 'opportunities' | 'calendar' | 'accountability' | 'mom' | 'discovery';
 
 export function AccountDetailPage({ accountId, onNavigate }: AccountDetailPageProps) {
   const { data, updateAccount } = useStore();
@@ -40,6 +48,9 @@ export function AccountDetailPage({ accountId, onNavigate }: AccountDetailPagePr
   const [editOpen, setEditOpen] = useState(false);
   const [editHealth, setEditHealth] = useState<AccountHealth>('green');
   const [editArr, setEditArr] = useState('');
+  const [discoveryActive, setDiscoveryActive] = useState(false);
+  const [requestFieldModal, setRequestFieldModal] = useState<{ field: string; currentValue: string } | null>(null);
+  const [expandedHistoryField, setExpandedHistoryField] = useState<string | null>(null);
 
   const account = data.accounts.find((a) => a.id === accountId);
   if (!account) {
@@ -55,10 +66,14 @@ export function AccountDetailPage({ accountId, onNavigate }: AccountDetailPagePr
   const interactions = data.interactions.filter((i) => i.accountId === accountId);
   const issues = data.issues.filter((i) => i.accountId === accountId);
   const opportunities = data.opportunities.filter((o) => o.accountId === accountId);
+  const openIssuesCount = issues.filter((i) => i.status !== 'Resolved' && i.status !== 'Closed').length;
   const calendar = data.calendar.filter((c) => c.accountId === accountId);
   const events = data.accountabilityEvents.filter((e) => e.accountId === accountId);
   const moms = data.momSummaries.filter((m) => m.accountId === accountId);
   const updateReqs = data.updateRequests.filter((u) => u.accountId === accountId);
+  const discoverySessions = data.discoverySessions
+    .filter((s) => s.accountId === accountId)
+    .sort((a, b) => b.date.localeCompare(a.date));
 
   const openEdit = () => {
     setEditHealth(account.health);
@@ -76,6 +91,7 @@ export function AccountDetailPage({ accountId, onNavigate }: AccountDetailPagePr
 
   const tabs: { id: Tab; label: string; icon: typeof MessageSquare; count: number }[] = [
     { id: 'overview', label: 'Overview', icon: Building2, count: 0 },
+    { id: 'discovery', label: 'Discovery', icon: Sparkles, count: discoverySessions.length },
     { id: 'interactions', label: 'Interactions', icon: MessageSquare, count: interactions.length },
     { id: 'issues', label: 'Issues', icon: AlertTriangle, count: issues.length },
     { id: 'opportunities', label: 'Opportunities', icon: TrendingUp, count: opportunities.length },
@@ -83,6 +99,13 @@ export function AccountDetailPage({ accountId, onNavigate }: AccountDetailPagePr
     { id: 'accountability', label: 'Accountability', icon: ShieldCheck, count: events.length },
     { id: 'mom', label: 'MOM', icon: FileText, count: moms.length },
   ];
+
+  const handleTabChange = (t: Tab) => {
+    setTab(t);
+    // Note: discoveryActive is intentionally left as-is when navigating away —
+    // GuidedDiscoveryFlow stays mounted (just hidden) below so an in-progress
+    // discovery session isn't wiped out by an accidental tab click.
+  };
 
   return (
     <div className="space-y-6">
@@ -133,8 +156,8 @@ export function AccountDetailPage({ accountId, onNavigate }: AccountDetailPagePr
             <AlertTriangle className="h-4 w-4" />
             <span className="text-xs font-medium">Open Issues</span>
           </div>
-          <p className={`font-display text-xl font-bold ${account.openIssues > 2 ? 'text-red-600' : account.openIssues > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
-            {issues.filter((i) => i.status !== 'Resolved' && i.status !== 'Closed').length}
+          <p className={`font-display text-xl font-bold ${openIssuesCount > 2 ? 'text-red-600' : openIssuesCount > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+            {openIssuesCount}
           </p>
         </Card>
         <Card className="p-4">
@@ -155,7 +178,7 @@ export function AccountDetailPage({ accountId, onNavigate }: AccountDetailPagePr
           return (
             <button
               key={t.id}
-              onClick={() => setTab(t.id)}
+              onClick={() => handleTabChange(t.id)}
               className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition whitespace-nowrap ${
                 isActive ? 'border-brand-600 text-brand-700' : 'border-transparent text-ink-500 hover:text-ink-700'
               }`}
@@ -250,6 +273,71 @@ export function AccountDetailPage({ accountId, onNavigate }: AccountDetailPagePr
                 </CardBody>
               </Card>
             )}
+
+            {c360 && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle>Account Information &amp; Verification</CardTitle>
+                    <Lock className="h-4 w-4 text-ink-300" />
+                  </div>
+                </CardHeader>
+                <CardBody className="space-y-3">
+                  {(
+                    [
+                      { key: 'legalName' as const, label: 'Legal Name', value: c360.legalName },
+                      { key: 'gst' as const, label: 'GST', value: c360.gst },
+                      { key: 'pan' as const, label: 'PAN', value: c360.pan },
+                    ]
+                  ).map((f) => {
+                    const meta = c360.fieldMeta[f.key];
+                    const fieldHistory = c360.history.filter((h) => h.field === f.key);
+                    const isExpanded = expandedHistoryField === f.key;
+                    return (
+                      <div key={f.key} className="p-3 rounded-lg border border-ink-100">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium text-ink-400 uppercase tracking-wide">{f.label}</p>
+                            <p className="text-sm font-medium text-ink-900 mt-0.5 truncate">{f.value || '—'}</p>
+                          </div>
+                          <VerificationBadge status={meta.verificationStatus} />
+                        </div>
+                        <p className="text-xs text-ink-400 mt-2">
+                          Source: {meta.source} · Updated {meta.lastUpdatedAt ? formatDate(meta.lastUpdatedAt) : '—'}
+                        </p>
+                        <div className="flex items-center gap-4 mt-2">
+                          <button
+                            onClick={() => setRequestFieldModal({ field: f.label, currentValue: f.value })}
+                            className="text-xs font-medium text-brand-600 hover:text-brand-700"
+                          >
+                            Request Change
+                          </button>
+                          {fieldHistory.length > 0 && (
+                            <button
+                              onClick={() => setExpandedHistoryField(isExpanded ? null : f.key)}
+                              className="text-xs font-medium text-ink-500 hover:text-ink-700 flex items-center gap-1"
+                            >
+                              <History className="h-3 w-3" /> History ({fieldHistory.length})
+                            </button>
+                          )}
+                        </div>
+                        {isExpanded && (
+                          <div className="mt-2 space-y-1.5 pt-2 border-t border-ink-100">
+                            {fieldHistory.map((h) => (
+                              <div key={h.id} className="text-xs text-ink-500">
+                                <span className="line-through text-ink-400">{h.oldValue}</span>{' '}
+                                → <span className="text-ink-900">{h.newValue}</span>
+                                <span className="text-ink-400"> · {h.changedBy} · {formatDate(h.changedAt)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </CardBody>
+              </Card>
+            )}
           </div>
 
           {/* Contacts sidebar */}
@@ -296,7 +384,10 @@ export function AccountDetailPage({ accountId, onNavigate }: AccountDetailPagePr
                   {updateReqs.map((r) => (
                     <div key={r.id} className="p-3 rounded-lg border border-ink-100">
                       <div className="flex items-center justify-between">
-                        <p className="text-sm font-medium text-ink-900">{r.field}</p>
+                        <p className="text-sm font-medium text-ink-900 flex items-center gap-1.5">
+                          {r.field}
+                          {r.attachment && <Paperclip className="h-3 w-3 text-ink-400" />}
+                        </p>
                         <Badge tone={r.status === 'Approved' ? 'green' : r.status === 'Rejected' ? 'red' : r.status === 'Action Required' ? 'amber' : 'neutral'}>
                           {r.status}
                         </Badge>
@@ -308,6 +399,110 @@ export function AccountDetailPage({ accountId, onNavigate }: AccountDetailPagePr
               </Card>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Stays mounted across tab switches (just hidden) so an in-progress discovery form is never silently lost. */}
+      {discoveryActive && (
+        <div className={tab === 'discovery' ? 'space-y-6' : 'hidden'}>
+          <GuidedDiscoveryFlow
+            account={account}
+            onCancel={() => setDiscoveryActive(false)}
+            onComplete={() => setDiscoveryActive(false)}
+          />
+        </div>
+      )}
+
+      {tab === 'discovery' && !discoveryActive && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-display font-semibold text-ink-900">Guided Discovery Sessions</h3>
+              <p className="text-sm text-ink-500 mt-0.5">Structured discovery captured for {account.name}, with automatic Issue, Opportunity, and Customer 360 updates.</p>
+            </div>
+            <Button variant="primary" onClick={() => setDiscoveryActive(true)}>
+              <Sparkles className="h-4 w-4" /> Start Guided Discovery
+            </Button>
+          </div>
+
+          {discoverySessions.length === 0 ? (
+                <Card>
+                  <EmptyState
+                    icon={<Sparkles className="h-7 w-7" />}
+                    title="No discovery sessions yet"
+                    message="Run a guided discovery to capture customer experience, growth plans, pain points, and more."
+                    action={
+                      <Button variant="primary" onClick={() => setDiscoveryActive(true)}>
+                        <Sparkles className="h-4 w-4" /> Start Guided Discovery
+                      </Button>
+                    }
+                  />
+                </Card>
+              ) : (
+                <div className="space-y-3">
+                  {discoverySessions.map((s) => (
+                    <Card key={s.id}>
+                      <CardBody className="space-y-3">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div className="flex items-center gap-2">
+                            <Badge tone={s.interactionType === 'First Interaction' ? 'blue' : 'neutral'}>{s.interactionType}</Badge>
+                            {s.experienceRating && (
+                              <Badge tone={s.isDissatisfied ? 'red' : s.experienceRating === 'Neutral' ? 'amber' : 'green'}>
+                                {s.experienceRating}
+                              </Badge>
+                            )}
+                          </div>
+                          <span className="flex items-center gap-1 text-xs text-ink-400">
+                            <Clock className="h-3 w-3" /> {formatDate(s.date)} · {s.conductedBy}
+                          </span>
+                        </div>
+                        <p className="text-sm text-ink-600 leading-relaxed">{s.keyFindings}</p>
+                        {(s.linkedIssueIds.length > 0 || s.linkedOpportunityIds.length > 0 || s.customer360FieldsUpdated.length > 0) && (
+                          <div className="flex flex-wrap items-center gap-2 pt-1">
+                            {s.linkedIssueIds.length > 0 && (
+                              <span className="chip bg-red-50 text-red-700">
+                                <AlertTriangle className="h-3 w-3" /> {s.linkedIssueIds.length} issue{s.linkedIssueIds.length > 1 ? 's' : ''} linked
+                              </span>
+                            )}
+                            {s.linkedOpportunityIds.length > 0 && (
+                              <span className="chip bg-emerald-50 text-emerald-700">
+                                <TrendingUp className="h-3 w-3" /> {s.linkedOpportunityIds.length} opportunit{s.linkedOpportunityIds.length > 1 ? 'ies' : 'y'} linked
+                              </span>
+                            )}
+                            {s.customer360FieldsUpdated.length > 0 && (
+                              <span className="chip bg-brand-50 text-brand-700">
+                                <FileText className="h-3 w-3" /> Customer 360 updated: {s.customer360FieldsUpdated.join(', ')}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </CardBody>
+                    </Card>
+                  ))}
+                </div>
+              )}
+
+              {c360 && c360.history.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Customer 360 Change History</CardTitle>
+                  </CardHeader>
+                  <CardBody className="space-y-2">
+                    {c360.history.map((h) => (
+                      <div key={h.id} className="flex items-start gap-3 p-2.5 rounded-lg border border-ink-100 text-sm">
+                        <FileText className="h-4 w-4 text-ink-400 shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-ink-700">
+                            <span className="font-medium">{h.field}</span>: <span className="text-ink-400 line-through">{h.oldValue}</span>{' '}
+                            → <span className="text-ink-900">{h.newValue}</span>
+                          </p>
+                          <p className="text-xs text-ink-400 mt-0.5">{h.changedBy} · {h.source} · {formatDate(h.changedAt)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </CardBody>
+                </Card>
+              )}
         </div>
       )}
 
@@ -499,6 +694,12 @@ export function AccountDetailPage({ accountId, onNavigate }: AccountDetailPagePr
                         ))}
                       </ul>
                     </div>
+                    {mom.customerFacingSummary && (
+                      <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3">
+                        <p className="text-xs font-medium text-blue-700 uppercase tracking-wide mb-1.5">Customer-Facing Summary</p>
+                        <p className="text-sm text-ink-700 whitespace-pre-line">{mom.customerFacingSummary}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))
@@ -547,6 +748,15 @@ export function AccountDetailPage({ accountId, onNavigate }: AccountDetailPagePr
           </div>
         </div>
       </Modal>
+
+      {requestFieldModal && (
+        <AccountUpdateRequestModal
+          account={account}
+          field={requestFieldModal.field}
+          currentValue={requestFieldModal.currentValue}
+          onClose={() => setRequestFieldModal(null)}
+        />
+      )}
     </div>
   );
 }

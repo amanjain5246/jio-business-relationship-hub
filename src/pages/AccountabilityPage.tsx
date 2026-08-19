@@ -20,6 +20,7 @@ const typeTone: Record<AccountabilityEventType, 'red' | 'amber' | 'green' | 'bra
   'Contract Signed': 'green',
   'Health Review': 'brand',
   'Site Visit': 'blue',
+  'Interaction Logged': 'brand',
 };
 
 const impactTone = { High: 'red', Medium: 'amber', Low: 'neutral' } as const;

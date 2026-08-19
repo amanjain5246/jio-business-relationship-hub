@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/Badge';
 import { AccountAvatar } from '@/components/ui/Avatar';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { formatINR, formatDate, daysUntil, relativeTime } from '@/utils/format';
+import { openIssueCount } from '@/utils/accountStats';
+import { DemoGuide } from '@/components/demo/DemoGuide';
 import {
   Building2,
   AlertTriangle,
@@ -63,6 +65,8 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         subtitle="Overview of your business relationships"
         icon={<Building2 className="h-5 w-5" />}
       />
+
+      <DemoGuide onNavigate={onNavigate} />
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -137,7 +141,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                   <AccountAvatar name={acc.name} gradient={acc.logoColor} size="sm" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-ink-900 truncate">{acc.name}</p>
-                    <p className="text-xs text-ink-400">{acc.openIssues} open issues · {formatINR(acc.arr)}</p>
+                    <p className="text-xs text-ink-400">{openIssueCount(data, acc.id)} open issues · {formatINR(acc.arr)}</p>
                   </div>
                   <HealthBadge health={acc.health} size="sm" />
                 </button>
@@ -155,7 +159,9 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             </div>
           </CardHeader>
           <CardBody className="space-y-3">
-            {upcomingRenewals.map((acc) => {
+            {upcomingRenewals.length === 0 ? (
+              <p className="text-sm text-ink-400 py-4 text-center">No renewals in the next 180 days</p>
+            ) : upcomingRenewals.map((acc) => {
               const days = daysUntil(acc.contractRenewal);
               return (
                 <button
@@ -188,7 +194,9 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             </div>
           </CardHeader>
           <CardBody className="space-y-3">
-            {recentInteractions.map((int) => {
+            {recentInteractions.length === 0 ? (
+              <p className="text-sm text-ink-400 py-4 text-center">No interactions logged yet</p>
+            ) : recentInteractions.map((int) => {
               const acc = data.accounts.find((a) => a.id === int.accountId);
               return (
                 <button
@@ -220,7 +228,9 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             </div>
           </CardHeader>
           <CardBody className="space-y-3">
-            {recentEvents.map((evt) => {
+            {recentEvents.length === 0 ? (
+              <p className="text-sm text-ink-400 py-4 text-center">No accountability events yet</p>
+            ) : recentEvents.map((evt) => {
               const acc = data.accounts.find((a) => a.id === evt.accountId);
               return (
                 <div key={evt.id} className="flex items-start gap-3 p-3 rounded-lg border border-ink-100">
@@ -253,7 +263,9 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         </CardHeader>
         <CardBody>
           <div className="space-y-2">
-            {upcomingCalendar.map((cal) => {
+            {upcomingCalendar.length === 0 ? (
+              <p className="text-sm text-ink-400 py-4 text-center">No upcoming meetings scheduled</p>
+            ) : upcomingCalendar.map((cal) => {
               const acc = data.accounts.find((a) => a.id === cal.accountId);
               const days = daysUntil(cal.date);
               return (
