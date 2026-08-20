@@ -75,6 +75,9 @@ export interface Customer360 {
     gst: FieldMetadata;
     pan: FieldMetadata;
   };
+  // Account intelligence — captured once known; corrections go through an Update Request like GST/PAN.
+  officeCount: number | null;
+  employeeCount: number | null;
 }
 
 export type InteractionChannel =
@@ -86,6 +89,16 @@ export type InteractionChannel =
   | 'Conference';
 
 export type InteractionDirection = 'Inbound' | 'Outbound';
+
+export interface InPersonCheckIn {
+  photoName: string;
+  photoSizeKb: number;
+  capturedAt: string; // ISO datetime
+  lat: number;
+  lng: number;
+  locationVerified: boolean;
+  verifiedNear: string; // account HQ city this was checked against
+}
 
 export interface Interaction {
   id: ID;
@@ -99,6 +112,7 @@ export interface Interaction {
   durationMins: number;
   owner: string;
   sentiment: 'positive' | 'neutral' | 'negative';
+  checkIn: InPersonCheckIn | null;
 }
 
 export type IssueStatus = 'Open' | 'In Progress' | 'Escalated' | 'Resolved' | 'Closed';
@@ -236,7 +250,7 @@ export type CalendarType =
   | 'Executive Meeting'
   | 'Training';
 
-export type MeetingMode = 'In-Person' | 'Virtual' | 'Phone' | 'Hybrid';
+export type MeetingMode = 'In-Person' | 'Virtual' | 'Phone';
 
 export type SchedulingAction = 'Scheduled' | 'Rescheduled' | 'Cancelled' | 'Completed';
 

@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useStore } from '@/store/StoreContext';
 import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
 import { AccountAvatar, Avatar } from '@/components/ui/Avatar';
 import { HealthBadge } from '@/components/ui/HealthBadge';
 import { ProgressBar } from '@/components/ui/ProgressBar';
@@ -14,11 +15,15 @@ import {
   buildCustomerFacingSummary,
   type FollowUpRecommendation,
 } from '@/utils/interactionCompletionEngine';
+import { categoryForDissatisfactionReasons } from '@/utils/discoveryEngine';
 import { findSchedulingConflicts } from '@/utils/schedulingEngine';
 import { useToast } from '@/components/ui/ToastProvider';
+import { useDeviceViewport } from '@/hooks/useDeviceViewport';
+import { AccountUpdateRequestModal } from '@/components/trust/AccountUpdateRequestModal';
 import type {
   Account,
   Contact,
+  Customer360,
   InteractionChannel,
   Issue,
   IssuePriority,
@@ -35,6 +40,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Calendar,
+  Camera,
   Check,
   CheckCircle2,
   ChevronRight,
@@ -52,10 +58,10 @@ import {
   Video,
   VideoOff,
   X,
-  Zap,
   AlertTriangle,
   Building2,
   User,
+  Users,
   ClipboardList,
 } from 'lucide-react';
 
@@ -68,6 +74,7 @@ type Step =
   | 'account'
   | 'mode'
   | 'simulate'
+  | 'intel'
   | 'discovery'
   | 'customer360'
   | 'issue'
@@ -83,7 +90,8 @@ const STEPS: { id: Step; label: string }[] = [
   { id: 'account', label: 'Account' },
   { id: 'mode', label: 'Mode' },
   { id: 'simulate', label: 'Interaction' },
-  { id: 'discovery', label: 'Discovery' },
+  { id: 'intel', label: 'Account Intel' },
+  { id: 'discovery', label: 'Feedback' },
   { id: 'customer360', label: 'Customer 360' },
   { id: 'issue', label: 'Issues' },
   { id: 'opportunity', label: 'Opportunities' },
@@ -98,14 +106,19 @@ const CHANNEL_BY_MODE: Record<MeetingMode, InteractionChannel> = {
   'In-Person': 'Site Visit',
   Virtual: 'Meeting',
   Phone: 'Call',
-  Hybrid: 'Meeting',
+};
+
+const MODE_LABEL: Record<MeetingMode, string> = {
+  Phone: 'Call',
+  Virtual: 'Virtual',
+  'In-Person': 'Meet',
 };
 
 const ISSUE_CATEGORIES: IssueCategory[] = ['Network', 'Billing', 'Service', 'Technical', 'Contract', 'Product'];
 const ISSUE_PRIORITIES: IssuePriority[] = ['P1', 'P2', 'P3', 'P4'];
 const OPP_STAGES: OpportunityStage[] = ['Discovery', 'Qualification', 'Proposal', 'Negotiation'];
 const CAL_TYPES: CalendarType[] = ['QBR', 'Renewal', 'Review', 'Follow-up', 'Executive Meeting', 'Training'];
-const MEETING_MODES: MeetingMode[] = ['In-Person', 'Virtual', 'Phone', 'Hybrid'];
+const MEETING_MODES: MeetingMode[] = ['Phone', 'Virtual', 'In-Person'];
 
 export function MobileURMPage({ onNavigate }: MobileURMPageProps) {
   const {
@@ -122,8 +135,11 @@ export function MobileURMPage({ onNavigate }: MobileURMPageProps) {
     updateAccount,
     updateCustomer360,
     addAccountabilityEvent,
+    addContact,
+    updateContact,
   } = useStore();
   const toast = useToast();
+  const device = useDeviceViewport();
 
   const [step, setStep] = useState<Step>('today');
   const [finalizing, setFinalizing] = useState(false);
@@ -132,7 +148,6 @@ export function MobileURMPage({ onNavigate }: MobileURMPageProps) {
   const [mode, setMode] = useState<MeetingMode>('In-Person');
   const [subject, setSubject] = useState('');
   const [summary, setSummary] = useState('');
-  const [sentiment, setSentiment] = useState<'positive' | 'neutral' | 'negative'>('positive');
   const [duration, setDuration] = useState(30);
   const [discoveryNotes, setDiscoveryNotes] = useState('');
   const [capturedIssues, setCapturedIssues] = useState<Issue[]>([]);
@@ -148,6 +163,30 @@ export function MobileURMPage({ onNavigate }: MobileURMPageProps) {
     purpose: '',
   });
   const [lateSchedulingReason, setLateSchedulingReason] = useState('');
+  const [checkInPhoto, setCheckInPhoto] = useState<{ name: string; sizeKb: number } | null>(null);
+  const [checkInLocation, setCheckInLocation] = useState<{ lat: number; lng: number; verifiedAt: string } | null>(null);
+  const [intelOfficeCount, setIntelOfficeCount] = useState('');
+  const [intelEmployeeCount, setIntelEmployeeCount] = useState('');
+  const [intelGst, setIntelGst] = useState('');
+  const [intelPan, setIntelPan] = useState('');
+  const [intelDmName, setIntelDmName] = useState('');
+  const [intelDmRole, setIntelDmRole] = useState('');
+  const [intelDmEmail, setIntelDmEmail] = useState('');
+  const [intelDmPhone, setIntelDmPhone] = useState('');
+  // Feedback step
+  const [happiness, setHappiness] = useState<'happy' | 'neutral' | 'unhappy' | null>(null);
+  const [improvementAreas, setImprovementAreas] = useState<string[]>([]);
+  const [improvementDetails, setImprovementDetails] = useState('');
+  const [growthPlans, setGrowthPlans] = useState('');
+  const [usingCompetitor, setUsingCompetitor] = useState<boolean | null>(null);
+  const [competitorNames, setCompetitorNames] = useState<string[]>([]);
+  const [willingToRefer, setWillingToRefer] = useState<boolean | null>(null);
+  const [feedbackPainPoints, setFeedbackPainPoints] = useState<string[]>([]);
+
+  // The old standalone sentiment picker is gone — sentiment is now derived from the
+  // customer-happiness question in the feedback step, so it can't drift out of sync.
+  const sentiment: 'positive' | 'neutral' | 'negative' =
+    happiness === 'happy' ? 'positive' : happiness === 'unhappy' ? 'negative' : 'neutral';
 
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -159,6 +198,12 @@ export function MobileURMPage({ onNavigate }: MobileURMPageProps) {
   const contacts = useMemo(() => (selectedAccountId ? data.contacts.filter((c) => c.accountId === selectedAccountId) : []), [data.contacts, selectedAccountId]);
   const selectedContact = useMemo(() => contacts.find((c) => c.id === selectedContactId) || null, [contacts, selectedContactId]);
   const c360 = useMemo(() => (selectedAccountId ? data.customer360.find((c) => c.accountId === selectedAccountId) : null), [data.customer360, selectedAccountId]);
+  const existingDecisionMaker = useMemo(() => contacts.find((c) => c.influence === 'Decision Maker') || null, [contacts]);
+  const missingOfficeCount = !c360 || c360.officeCount == null;
+  const missingEmployeeCount = !c360 || c360.employeeCount == null;
+  const missingGst = !c360 || !c360.gst;
+  const missingPan = !c360 || !c360.pan;
+  const missingDecisionMaker = !existingDecisionMaker;
 
   // Today's interactions: calendar scheduled for today + recent interactions
   const today = new Date().toISOString().slice(0, 10);
@@ -207,9 +252,22 @@ export function MobileURMPage({ onNavigate }: MobileURMPageProps) {
     switch (step) {
       case 'today': return true;
       case 'account': return !!selectedAccountId;
-      case 'mode': return !!mode;
-      case 'simulate': return subject.trim().length > 0 && summary.trim().length > 0;
-      case 'discovery': return true;
+      case 'mode': return !!mode && isModeAllowed(mode, device);
+      case 'simulate':
+        if (mode === 'In-Person') return !!checkInPhoto && !!checkInLocation && subject.trim().length > 0 && summary.trim().length > 0;
+        return subject.trim().length > 0 && summary.trim().length > 0;
+      case 'intel': {
+        if (missingOfficeCount && !intelOfficeCount.trim()) return false;
+        if (missingEmployeeCount && !intelEmployeeCount.trim()) return false;
+        if (missingGst && !intelGst.trim()) return false;
+        if (missingPan && !intelPan.trim()) return false;
+        if (missingDecisionMaker && !(intelDmName.trim() && (intelDmEmail.trim() || intelDmPhone.trim()))) return false;
+        return true;
+      }
+      case 'discovery':
+        if (!happiness) return false;
+        if (happiness === 'unhappy' && improvementAreas.length === 0 && !improvementDetails.trim()) return false;
+        return true;
       case 'customer360': return true;
       case 'issue': return true;
       case 'opportunity': return true;
@@ -277,6 +335,18 @@ export function MobileURMPage({ onNavigate }: MobileURMPageProps) {
       durationMins: duration,
       owner,
       sentiment,
+      checkIn:
+        mode === 'In-Person' && checkInPhoto && checkInLocation
+          ? {
+              photoName: checkInPhoto.name,
+              photoSizeKb: checkInPhoto.sizeKb,
+              capturedAt: now,
+              lat: checkInLocation.lat,
+              lng: checkInLocation.lng,
+              locationVerified: true,
+              verifiedNear: account.hqCity,
+            }
+          : null,
     };
     addInteraction(interaction);
 
@@ -324,6 +394,78 @@ export function MobileURMPage({ onNavigate }: MobileURMPageProps) {
       const c360Updates = sentimentCustomer360Updates(sentiment, c360);
       if (Object.keys(c360Updates).length > 0) {
         updateCustomer360(account.id, c360Updates, owner, 'Interaction Completion');
+      }
+    }
+
+    // 4b. Account intelligence — first-time capture only; corrections go through an
+    // Update Request instead (raised from the Account Intel step itself).
+    if (c360) {
+      const intelUpdates: Partial<Customer360> = {};
+      if (missingOfficeCount && intelOfficeCount.trim()) intelUpdates.officeCount = Number(intelOfficeCount) || 0;
+      if (missingEmployeeCount && intelEmployeeCount.trim()) intelUpdates.employeeCount = Number(intelEmployeeCount) || 0;
+      if (missingGst && intelGst.trim()) intelUpdates.gst = intelGst.trim();
+      if (missingPan && intelPan.trim()) intelUpdates.pan = intelPan.trim();
+      if (Object.keys(intelUpdates).length > 0) {
+        updateCustomer360(account.id, intelUpdates, owner, 'Account Intelligence Capture');
+      }
+    }
+    if (intelDmName.trim()) {
+      if (existingDecisionMaker) updateContact(existingDecisionMaker.id, { influence: 'Influencer' });
+      addContact({
+        id: genId('con'),
+        accountId: account.id,
+        name: intelDmName.trim(),
+        role: intelDmRole.trim() || 'Decision Maker',
+        email: intelDmEmail.trim(),
+        phone: intelDmPhone.trim(),
+        isPrimary: !existingDecisionMaker,
+        influence: 'Decision Maker',
+      });
+    }
+
+    // 4c. Customer feedback — auto-create/update an Issue when unhappy, and fold
+    // strategic signals (growth plans, competitor threat, pain points) into
+    // Customer 360 so they roll up into Analytics for leadership visibility.
+    if (happiness === 'unhappy') {
+      const category = categoryForDissatisfactionReasons(improvementAreas);
+      const title = `Customer dissatisfaction — ${improvementAreas[0] || 'General experience'}`;
+      const match = findMatchingOpenIssue(title, existingOpenIssues);
+      if (match) {
+        updateIssue(match.id, {
+          description: `${match.description}\n\nFeedback from ${formatDate(today)} interaction: ${improvementDetails || 'Customer remains dissatisfied.'}`,
+          updatedAt: today,
+        });
+      } else {
+        addIssue({
+          id: genId('iss'),
+          accountId: account.id,
+          title,
+          description: improvementDetails || 'Dissatisfaction identified during interaction feedback.',
+          status: 'Open',
+          priority: 'P2',
+          category,
+          assignedTo: owner,
+          createdAt: today,
+          updatedAt: today,
+          resolvedAt: null,
+          dueDate: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
+          healthImpact: 'amber',
+        });
+      }
+    }
+    if (c360) {
+      const feedbackUpdates: Partial<Customer360> = {};
+      const riskAdds = [
+        ...feedbackPainPoints,
+        ...(usingCompetitor && competitorNames.length > 0 ? [`Evaluating competitor(s): ${competitorNames.join(', ')}`] : []),
+      ].filter((r) => r.trim() && !c360.keyRisks.some((existing) => existing.toLowerCase() === r.trim().toLowerCase()));
+      if (riskAdds.length > 0) feedbackUpdates.keyRisks = [...c360.keyRisks, ...riskAdds];
+      const growth = growthPlans.trim();
+      if (growth && !c360.objectives.some((o) => o.toLowerCase() === growth.toLowerCase())) {
+        feedbackUpdates.objectives = [...c360.objectives, growth];
+      }
+      if (Object.keys(feedbackUpdates).length > 0) {
+        updateCustomer360(account.id, feedbackUpdates, owner, 'Interaction Feedback');
       }
     }
 
@@ -405,7 +547,7 @@ export function MobileURMPage({ onNavigate }: MobileURMPageProps) {
       accountId: account.id,
       createdAt: now,
       read: false,
-      priority: capturedIssues.some((i) => i.priority === 'P1') ? 'high' : 'medium',
+      priority: capturedIssues.some((i) => i.priority === 'P1') || happiness === 'unhappy' ? 'high' : 'medium',
     });
 
     if (!nextMeeting.date && followUpRecommendation) {
@@ -433,7 +575,6 @@ export function MobileURMPage({ onNavigate }: MobileURMPageProps) {
     setMode('In-Person');
     setSubject('');
     setSummary('');
-    setSentiment('positive');
     setDuration(30);
     setDiscoveryNotes('');
     setCapturedIssues([]);
@@ -443,6 +584,24 @@ export function MobileURMPage({ onNavigate }: MobileURMPageProps) {
     setNextMeeting({ date: '', time: '10:00', durationMins: 60, type: 'Follow-up', mode: 'Virtual', purpose: '' });
     setLateSchedulingReason('');
     setFinalizing(false);
+    setCheckInPhoto(null);
+    setCheckInLocation(null);
+    setIntelOfficeCount('');
+    setIntelEmployeeCount('');
+    setIntelGst('');
+    setIntelPan('');
+    setIntelDmName('');
+    setIntelDmRole('');
+    setIntelDmEmail('');
+    setIntelDmPhone('');
+    setHappiness(null);
+    setImprovementAreas([]);
+    setImprovementDetails('');
+    setGrowthPlans('');
+    setUsingCompetitor(null);
+    setCompetitorNames([]);
+    setWillingToRefer(null);
+    setFeedbackPainPoints([]);
   };
 
   return (
@@ -501,6 +660,7 @@ export function MobileURMPage({ onNavigate }: MobileURMPageProps) {
             onSelectContact={setSelectedContactId}
             mode={mode}
             setMode={setMode}
+            device={device}
           />
         )}
 
@@ -513,15 +673,67 @@ export function MobileURMPage({ onNavigate }: MobileURMPageProps) {
             setSubject={setSubject}
             summary={summary}
             setSummary={setSummary}
-            sentiment={sentiment}
-            setSentiment={setSentiment}
             duration={duration}
             setDuration={setDuration}
+            checkInPhoto={checkInPhoto}
+            setCheckInPhoto={setCheckInPhoto}
+            checkInLocation={checkInLocation}
+            setCheckInLocation={setCheckInLocation}
           />
         )}
 
-        {step === 'discovery' && (
-          <DiscoveryStep notes={discoveryNotes} setNotes={setDiscoveryNotes} account={account} contact={selectedContact} />
+        {step === 'intel' && account && (
+          <IntelStep
+            account={account}
+            c360={c360 ?? null}
+            existingDecisionMaker={existingDecisionMaker}
+            missingOfficeCount={missingOfficeCount}
+            missingEmployeeCount={missingEmployeeCount}
+            missingGst={missingGst}
+            missingPan={missingPan}
+            missingDecisionMaker={missingDecisionMaker}
+            officeCountInput={intelOfficeCount}
+            setOfficeCountInput={setIntelOfficeCount}
+            employeeCountInput={intelEmployeeCount}
+            setEmployeeCountInput={setIntelEmployeeCount}
+            gstInput={intelGst}
+            setGstInput={setIntelGst}
+            panInput={intelPan}
+            setPanInput={setIntelPan}
+            dmName={intelDmName}
+            setDmName={setIntelDmName}
+            dmRole={intelDmRole}
+            setDmRole={setIntelDmRole}
+            dmEmail={intelDmEmail}
+            setDmEmail={setIntelDmEmail}
+            dmPhone={intelDmPhone}
+            setDmPhone={setIntelDmPhone}
+          />
+        )}
+
+        {step === 'discovery' && account && (
+          <FeedbackStep
+            account={account}
+            contact={selectedContact}
+            happiness={happiness}
+            setHappiness={setHappiness}
+            improvementAreas={improvementAreas}
+            setImprovementAreas={setImprovementAreas}
+            improvementDetails={improvementDetails}
+            setImprovementDetails={setImprovementDetails}
+            growthPlans={growthPlans}
+            setGrowthPlans={setGrowthPlans}
+            usingCompetitor={usingCompetitor}
+            setUsingCompetitor={setUsingCompetitor}
+            competitorNames={competitorNames}
+            setCompetitorNames={setCompetitorNames}
+            willingToRefer={willingToRefer}
+            setWillingToRefer={setWillingToRefer}
+            painPoints={feedbackPainPoints}
+            setPainPoints={setFeedbackPainPoints}
+            notes={discoveryNotes}
+            setNotes={setDiscoveryNotes}
+          />
         )}
 
         {step === 'customer360' && account && (
@@ -649,6 +861,9 @@ function TodayStep({
   onStartNew: (acc?: Account) => void;
   onNavigate: (path: string) => void;
 }) {
+  const inPersonToday = todaysCalendar.filter((c) => c.mode === 'In-Person');
+  const otherToday = todaysCalendar.filter((c) => c.mode !== 'In-Person');
+
   return (
     <div className="space-y-5">
       <div>
@@ -656,11 +871,41 @@ function TodayStep({
         <p className="text-sm text-ink-500">Start an interaction from today's schedule or pick any account.</p>
       </div>
 
-      {todaysCalendar.length > 0 && (
+      {inPersonToday.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+            <MapPin className="h-3.5 w-3.5" /> In-Person Visits Today ({inPersonToday.length})
+          </p>
+          <div className="space-y-2">
+            {inPersonToday.map((cal) => {
+              const acc = accounts.find((a) => a.id === cal.accountId);
+              return (
+                <button
+                  key={cal.id}
+                  onClick={() => onStartFromCalendar(cal)}
+                  className="w-full flex items-center gap-3 p-3.5 rounded-xl border-2 border-amber-200 bg-amber-50/50 hover:border-amber-400 hover:bg-amber-50 transition text-left active:scale-[0.99]"
+                >
+                  <div className="flex flex-col items-center justify-center h-12 w-12 rounded-lg bg-amber-500 text-white shrink-0">
+                    <span className="text-xs font-medium">{cal.time.split(':')[0]}</span>
+                    <span className="text-[10px]">{cal.time.split(':')[1]}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-ink-900 truncate">{cal.title}</p>
+                    <p className="text-xs text-ink-500 flex items-center gap-1"><MapPin className="h-3 w-3" /> {cal.location} · {acc?.name}</p>
+                  </div>
+                  <ChevronRight className="h-5 w-5 text-amber-400 shrink-0" />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {otherToday.length > 0 && (
         <div>
           <p className="text-xs font-semibold text-ink-400 uppercase tracking-wide mb-2">Scheduled Meetings</p>
           <div className="space-y-2">
-            {todaysCalendar.map((cal) => {
+            {otherToday.map((cal) => {
               const acc = accounts.find((a) => a.id === cal.accountId);
               return (
                 <button
@@ -674,7 +919,7 @@ function TodayStep({
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-ink-900 truncate">{cal.title}</p>
-                    <p className="text-xs text-ink-400">{acc?.name} · {cal.mode} · {cal.durationMins}m</p>
+                    <p className="text-xs text-ink-400">{acc?.name} · {MODE_LABEL[cal.mode]} · {cal.durationMins}m</p>
                   </div>
                   <ChevronRight className="h-5 w-5 text-ink-300 shrink-0" />
                 </button>
@@ -784,6 +1029,18 @@ function AccountStep({
   );
 }
 
+const MODE_ICONS: Record<MeetingMode, typeof Phone> = {
+  'In-Person': MapPin,
+  Virtual: Video,
+  Phone: Phone,
+};
+
+function isModeAllowed(m: MeetingMode, device: 'mobile' | 'desktop'): boolean {
+  if (m === 'In-Person') return true;
+  if (m === 'Virtual') return device === 'desktop';
+  return device === 'mobile'; // Phone / Call
+}
+
 function ModeStep({
   account,
   contacts,
@@ -791,6 +1048,7 @@ function ModeStep({
   onSelectContact,
   mode,
   setMode,
+  device,
 }: {
   account: Account;
   contacts: Contact[];
@@ -798,13 +1056,8 @@ function ModeStep({
   onSelectContact: (id: string) => void;
   mode: MeetingMode;
   setMode: (m: MeetingMode) => void;
+  device: 'mobile' | 'desktop';
 }) {
-  const modeIcons: Record<MeetingMode, typeof Phone> = {
-    'In-Person': MapPin,
-    Virtual: Video,
-    Phone: Phone,
-    Hybrid: Zap,
-  };
   return (
     <div className="space-y-5">
       <div>
@@ -839,42 +1092,52 @@ function ModeStep({
       {/* Mode selection */}
       <div>
         <p className="text-xs font-semibold text-ink-400 uppercase tracking-wide mb-2">Mode</p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-2.5">
           {MEETING_MODES.map((m) => {
-            const Icon = modeIcons[m];
+            const Icon = MODE_ICONS[m];
             const active = mode === m;
+            const allowed = isModeAllowed(m, device);
             return (
               <button
                 key={m}
-                onClick={() => setMode(m)}
+                onClick={() => allowed && setMode(m)}
+                disabled={!allowed}
                 className={`flex flex-col items-center gap-2 py-5 rounded-xl border-2 transition active:scale-[0.98] ${
-                  active ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-ink-200 text-ink-600 hover:border-ink-300'
+                  !allowed
+                    ? 'border-ink-100 text-ink-300 bg-ink-50 cursor-not-allowed'
+                    : active
+                      ? 'border-brand-500 bg-brand-50 text-brand-700'
+                      : 'border-ink-200 text-ink-600 hover:border-ink-300'
                 }`}
               >
                 <Icon className="h-7 w-7" />
-                <span className="text-sm font-semibold">{m}</span>
+                <span className="text-sm font-semibold">{MODE_LABEL[m]}</span>
               </button>
             );
           })}
         </div>
+        <p className="text-xs text-ink-400 mt-2">
+          {device === 'desktop'
+            ? 'Virtual and In-Person are available on this laptop/desktop view. Switch to a phone for Call.'
+            : 'Call and In-Person are available on this phone. Switch to a laptop/desktop for Virtual.'}
+        </p>
       </div>
     </div>
   );
 }
 
-function SimulateStep({
-  mode,
-  account,
-  contact,
-  subject,
-  setSubject,
-  summary,
-  setSummary,
-  sentiment,
-  setSentiment,
-  duration,
-  setDuration,
-}: {
+interface CheckInPhoto {
+  name: string;
+  sizeKb: number;
+}
+
+interface CheckInLocation {
+  lat: number;
+  lng: number;
+  verifiedAt: string;
+}
+
+interface SimulateStepProps {
   mode: MeetingMode;
   account: Account | null;
   contact: Contact | null;
@@ -882,11 +1145,20 @@ function SimulateStep({
   setSubject: (v: string) => void;
   summary: string;
   setSummary: (v: string) => void;
-  sentiment: 'positive' | 'neutral' | 'negative';
-  setSentiment: (v: 'positive' | 'neutral' | 'negative') => void;
   duration: number;
   setDuration: (v: number) => void;
-}) {
+  checkInPhoto: CheckInPhoto | null;
+  setCheckInPhoto: (v: CheckInPhoto | null) => void;
+  checkInLocation: CheckInLocation | null;
+  setCheckInLocation: (v: CheckInLocation | null) => void;
+}
+
+function SimulateStep(props: SimulateStepProps) {
+  if (props.mode === 'In-Person') return <InPersonCheckInStep {...props} />;
+  return <CallVirtualStep {...props} />;
+}
+
+function CallVirtualStep({ mode, account, contact, subject, setSubject, summary, setSummary, duration, setDuration }: SimulateStepProps) {
   const [simState, setSimState] = useState<'idle' | 'connecting' | 'active' | 'ended'>('idle');
   const [simSeconds, setSimSeconds] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -912,14 +1184,13 @@ function SimulateStep({
 
   const fmtTime = (s: number) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
 
-  const simIcon = mode === 'Phone' ? PhoneCall : mode === 'Virtual' ? Video : MapPin;
-  const SimIcon = simIcon;
+  const SimIcon = mode === 'Phone' ? PhoneCall : Video;
 
   return (
     <div className="space-y-5">
       <div>
         <h2 className="text-lg font-bold text-ink-900 mb-1">Start Interaction</h2>
-        <p className="text-sm text-ink-500">{account?.name} · {contact?.name || 'No contact'} · {mode}</p>
+        <p className="text-sm text-ink-500">{account?.name} · {contact?.name || 'No contact'} · {MODE_LABEL[mode]}</p>
       </div>
 
       {/* Simulation */}
@@ -928,16 +1199,16 @@ function SimulateStep({
           {simState === 'idle' && (
             <>
               <SimIcon className="h-12 w-12 mx-auto mb-3 opacity-80" />
-              <p className="text-sm text-ink-300 mb-4">Ready to start {mode.toLowerCase()} interaction</p>
+              <p className="text-sm text-ink-300 mb-4">Ready to start {mode === 'Phone' ? 'the call' : 'the virtual meeting'}</p>
               <button onClick={startSim} className="px-6 py-3 rounded-full bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 transition active:scale-95">
-                {mode === 'Phone' ? 'Dial Now' : mode === 'Virtual' ? 'Join Meeting' : 'Check In'}
+                {mode === 'Phone' ? 'Dial Now' : 'Join Meeting'}
               </button>
             </>
           )}
           {simState === 'connecting' && (
             <div className="py-2">
               <div className="h-12 w-12 mx-auto mb-3 rounded-full border-4 border-white/20 border-t-white animate-spin" />
-              <p className="text-sm text-ink-300">{mode === 'Phone' ? 'Dialing...' : mode === 'Virtual' ? 'Connecting...' : 'Checking in...'}</p>
+              <p className="text-sm text-ink-300">{mode === 'Phone' ? 'Dialing...' : 'Connecting...'}</p>
             </div>
           )}
           {simState === 'active' && (
@@ -974,24 +1245,6 @@ function SimulateStep({
           <textarea value={summary} onChange={(e) => setSummary(e.target.value)} placeholder="Key discussion points..." rows={4} className="input resize-none" />
         </div>
         <div>
-          <label className="text-sm font-medium text-ink-700 mb-1.5 block">Sentiment</label>
-          <div className="grid grid-cols-3 gap-2">
-            {(['positive', 'neutral', 'negative'] as const).map((s) => (
-              <button
-                key={s}
-                onClick={() => setSentiment(s)}
-                className={`py-2.5 rounded-xl border-2 text-sm font-medium capitalize transition ${
-                  sentiment === s
-                    ? s === 'positive' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : s === 'negative' ? 'border-red-500 bg-red-50 text-red-700' : 'border-ink-400 bg-ink-50 text-ink-700'
-                    : 'border-ink-200 text-ink-500'
-                }`}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div>
           <label className="text-sm font-medium text-ink-700 mb-1.5 block">Duration: {duration} min</label>
           <input type="range" min={5} max={180} step={5} value={duration} onChange={(e) => setDuration(Number(e.target.value))} className="w-full accent-brand-600" />
         </div>
@@ -1000,32 +1253,566 @@ function SimulateStep({
   );
 }
 
-function DiscoveryStep({ notes, setNotes, account, contact }: { notes: string; setNotes: (v: string) => void; account: Account | null; contact: Contact | null }) {
-  const prompts = [
-    'What are the customer\'s current priorities?',
-    'Any pain points or challenges mentioned?',
-    'What solutions are they evaluating?',
-    'Budget or timeline constraints?',
-    'Who else is involved in the decision?',
-  ];
+function InPersonCheckInStep({
+  account,
+  contact,
+  subject,
+  setSubject,
+  summary,
+  setSummary,
+  duration,
+  setDuration,
+  checkInPhoto,
+  setCheckInPhoto,
+  checkInLocation,
+  setCheckInLocation,
+}: SimulateStepProps) {
+  const [locating, setLocating] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [simState, setSimState] = useState<'idle' | 'active' | 'ended'>('idle');
+  const [simSeconds, setSimSeconds] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, []);
+
+  useEffect(() => {
+    if (checkInPhoto && checkInLocation && simState === 'idle') {
+      setSimState('active');
+      setSimSeconds(0);
+      timerRef.current = setInterval(() => setSimSeconds((s) => s + 1), 1000);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkInPhoto, checkInLocation]);
+
+  const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCheckInPhoto({ name: file.name, sizeKb: Math.max(1, Math.round(file.size / 1024)) });
+    e.target.value = '';
+  };
+
+  const verifyLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not available on this device.');
+      return;
+    }
+    setLocating(true);
+    setLocationError(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setCheckInLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude, verifiedAt: new Date().toISOString() });
+        setLocating(false);
+      },
+      (err) => {
+        setLocationError(err.message || 'Could not verify location. Allow location access and try again.');
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  };
+
+  const endVisit = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setSimState('ended');
+    setDuration(Math.max(1, Math.round(simSeconds / 60)));
+  };
+
+  const fmtTime = (s: number) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
+
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-lg font-bold text-ink-900 mb-1">Guided Discovery</h2>
-        <p className="text-sm text-ink-500">{account?.name} · {contact?.name || 'No contact'}</p>
+        <h2 className="text-lg font-bold text-ink-900 mb-1">In-Person Check-In</h2>
+        <p className="text-sm text-ink-500">{account?.name} · {contact?.name || 'No contact'} · Meet</p>
       </div>
-      <div className="space-y-2">
-        <p className="text-xs font-semibold text-ink-400 uppercase tracking-wide">Discovery Prompts</p>
-        {prompts.map((p, i) => (
-          <div key={i} className="flex items-start gap-2 p-3 rounded-lg bg-blue-50 border border-blue-100">
-            <Sparkles className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
-            <p className="text-sm text-ink-700">{p}</p>
+
+      {/* Step 1: live photo */}
+      <div className="rounded-xl border-2 border-ink-200 p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <span className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${checkInPhoto ? 'bg-emerald-500 text-white' : 'bg-ink-200 text-ink-500'}`}>
+            {checkInPhoto ? <Check className="h-3.5 w-3.5" /> : '1'}
+          </span>
+          <p className="text-sm font-semibold text-ink-900">Capture a live photo</p>
+        </div>
+        {checkInPhoto ? (
+          <div className="flex items-center justify-between p-2.5 rounded-lg bg-emerald-50 border border-emerald-200">
+            <span className="text-sm text-emerald-800 flex items-center gap-2 min-w-0">
+              <Camera className="h-4 w-4 shrink-0" /> <span className="truncate">{checkInPhoto.name}</span>
+            </span>
+            <button onClick={() => setCheckInPhoto(null)} className="p-1.5 -m-1.5 rounded text-emerald-700 hover:bg-emerald-100" aria-label="Retake photo">
+              <X className="h-4 w-4" />
+            </button>
           </div>
-        ))}
+        ) : (
+          <label className="flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-ink-300 text-sm font-medium text-ink-600 cursor-pointer hover:border-brand-400 hover:text-brand-600 transition">
+            <Camera className="h-5 w-5" /> Take Photo
+            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoCapture} />
+          </label>
+        )}
+        <p className="text-xs text-ink-400">Camera only — uploading from the gallery isn't allowed.</p>
       </div>
+
+      {/* Step 2: location */}
+      <div className={`rounded-xl border-2 p-4 space-y-3 transition ${checkInPhoto ? 'border-ink-200' : 'border-ink-100 opacity-50 pointer-events-none'}`}>
+        <div className="flex items-center gap-2">
+          <span className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${checkInLocation ? 'bg-emerald-500 text-white' : 'bg-ink-200 text-ink-500'}`}>
+            {checkInLocation ? <Check className="h-3.5 w-3.5" /> : '2'}
+          </span>
+          <p className="text-sm font-semibold text-ink-900">Verify your location</p>
+        </div>
+        {checkInLocation ? (
+          <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200">
+            <p className="text-sm text-emerald-800 flex items-center gap-2"><MapPin className="h-4 w-4" /> Location verified near {account?.hqCity}</p>
+            <p className="text-xs text-emerald-600 mt-0.5">{checkInLocation.lat.toFixed(4)}, {checkInLocation.lng.toFixed(4)} · {new Date(checkInLocation.verifiedAt).toLocaleTimeString()}</p>
+          </div>
+        ) : (
+          <button
+            onClick={verifyLocation}
+            disabled={locating}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 active:scale-[0.99] transition disabled:opacity-50"
+          >
+            {locating ? <Loader2 className="h-4 w-4 animate-spin" /> : <MapPin className="h-4 w-4" />}
+            {locating ? 'Verifying location...' : 'Verify Location'}
+          </button>
+        )}
+        {locationError && (
+          <p className="text-xs text-red-600 flex items-start gap-1"><AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" /> {locationError}</p>
+        )}
+      </div>
+
+      {/* Step 3: timer, auto-starts once photo + location are captured */}
+      {checkInPhoto && checkInLocation && (
+        <div className="rounded-2xl border-2 border-ink-200 overflow-hidden">
+          <div className="bg-gradient-to-br from-ink-800 to-ink-900 px-5 py-6 text-center text-white">
+            {simState === 'active' && (
+              <>
+                <div className="h-12 w-12 mx-auto mb-2 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                  <MapPin className="h-6 w-6 text-emerald-400" />
+                </div>
+                <p className="text-2xl font-mono font-bold mb-1">{fmtTime(simSeconds)}</p>
+                <p className="text-xs text-ink-400 mb-3">Visit in progress</p>
+                <button onClick={endVisit} className="px-6 py-2.5 rounded-full bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition active:scale-95 mx-auto">
+                  End Visit
+                </button>
+              </>
+            )}
+            {simState === 'ended' && (
+              <>
+                <CheckCircle2 className="h-12 w-12 mx-auto mb-2 text-emerald-400" />
+                <p className="text-sm text-ink-300 mb-1">Visit completed</p>
+                <p className="text-lg font-semibold">{duration} minutes</p>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Step 4: form — only revealed once the visit has ended */}
+      {simState === 'ended' && (
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm font-medium text-ink-700 mb-1.5 block">Subject</label>
+            <input type="text" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="What was this visit about?" className="input" />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-ink-700 mb-1.5 block">Summary</label>
+            <textarea value={summary} onChange={(e) => setSummary(e.target.value)} placeholder="Key discussion points..." rows={4} className="input resize-none" />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-ink-700 mb-1.5 block">Duration: {duration} min</label>
+            <input type="range" min={5} max={180} step={5} value={duration} onChange={(e) => setDuration(Number(e.target.value))} className="w-full accent-brand-600" />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function IntelFactRow({
+  icon: Icon,
+  label,
+  missing,
+  knownValue,
+  inputValue,
+  setInputValue,
+  inputType = 'text',
+  placeholder,
+  onFlag,
+}: {
+  icon: typeof Building2;
+  label: string;
+  missing: boolean;
+  knownValue: string;
+  inputValue: string;
+  setInputValue: (v: string) => void;
+  inputType?: string;
+  placeholder: string;
+  onFlag: () => void;
+}) {
+  return (
+    <div className="rounded-xl border-2 border-ink-200 p-4 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-ink-900 flex items-center gap-2"><Icon className="h-4 w-4 text-ink-400 shrink-0" /> {label}</p>
+        {!missing && (
+          <button onClick={onFlag} className="text-xs font-medium text-brand-600 hover:text-brand-700 shrink-0">This has changed</button>
+        )}
+      </div>
+      {missing ? (
+        <input type={inputType} value={inputValue} onChange={(e) => setInputValue(e.target.value)} placeholder={placeholder} className="input" />
+      ) : (
+        <p className="text-sm text-ink-700">{knownValue}</p>
+      )}
+    </div>
+  );
+}
+
+function IntelStep({
+  account,
+  c360,
+  existingDecisionMaker,
+  missingOfficeCount,
+  missingEmployeeCount,
+  missingGst,
+  missingPan,
+  missingDecisionMaker,
+  officeCountInput,
+  setOfficeCountInput,
+  employeeCountInput,
+  setEmployeeCountInput,
+  gstInput,
+  setGstInput,
+  panInput,
+  setPanInput,
+  dmName,
+  setDmName,
+  dmRole,
+  setDmRole,
+  dmEmail,
+  setDmEmail,
+  dmPhone,
+  setDmPhone,
+}: {
+  account: Account;
+  c360: Customer360 | null;
+  existingDecisionMaker: Contact | null;
+  missingOfficeCount: boolean;
+  missingEmployeeCount: boolean;
+  missingGst: boolean;
+  missingPan: boolean;
+  missingDecisionMaker: boolean;
+  officeCountInput: string;
+  setOfficeCountInput: (v: string) => void;
+  employeeCountInput: string;
+  setEmployeeCountInput: (v: string) => void;
+  gstInput: string;
+  setGstInput: (v: string) => void;
+  panInput: string;
+  setPanInput: (v: string) => void;
+  dmName: string;
+  setDmName: (v: string) => void;
+  dmRole: string;
+  setDmRole: (v: string) => void;
+  dmEmail: string;
+  setDmEmail: (v: string) => void;
+  dmPhone: string;
+  setDmPhone: (v: string) => void;
+}) {
+  const [flagField, setFlagField] = useState<{ field: string; currentValue: string } | null>(null);
+  const [editingDM, setEditingDM] = useState(false);
+
+  const anyMissing = missingOfficeCount || missingEmployeeCount || missingGst || missingPan || missingDecisionMaker;
+
+  return (
+    <div className="space-y-4">
       <div>
-        <label className="text-sm font-medium text-ink-700 mb-1.5 block">Discovery Notes</label>
-        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Capture key findings, needs, and insights..." rows={6} className="input resize-none" />
+        <h2 className="text-lg font-bold text-ink-900 mb-1">Account Intelligence</h2>
+        <p className="text-sm text-ink-500">{account.name} — confirm the basics so we have accurate facts, regardless of how the conversation goes.</p>
+      </div>
+
+      {anyMissing && (
+        <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 flex items-start gap-2">
+          <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-800">Some account facts are missing — capture them below before continuing.</p>
+        </div>
+      )}
+
+      <IntelFactRow
+        icon={Building2}
+        label="Number of Offices"
+        missing={missingOfficeCount}
+        knownValue={c360 && c360.officeCount != null ? String(c360.officeCount) : '—'}
+        inputValue={officeCountInput}
+        setInputValue={setOfficeCountInput}
+        inputType="number"
+        placeholder="e.g. 12"
+        onFlag={() => setFlagField({ field: 'Office Count', currentValue: c360?.officeCount != null ? String(c360.officeCount) : '' })}
+      />
+      <IntelFactRow
+        icon={Users}
+        label="Number of Employees"
+        missing={missingEmployeeCount}
+        knownValue={c360 && c360.employeeCount != null ? c360.employeeCount.toLocaleString('en-IN') : '—'}
+        inputValue={employeeCountInput}
+        setInputValue={setEmployeeCountInput}
+        inputType="number"
+        placeholder="e.g. 5000"
+        onFlag={() => setFlagField({ field: 'Employee Count', currentValue: c360?.employeeCount != null ? String(c360.employeeCount) : '' })}
+      />
+      <IntelFactRow
+        icon={ShieldCheck}
+        label="GST"
+        missing={missingGst}
+        knownValue={c360?.gst || '—'}
+        inputValue={gstInput}
+        setInputValue={setGstInput}
+        placeholder="15-digit GSTIN"
+        onFlag={() => setFlagField({ field: 'GST', currentValue: c360?.gst || '' })}
+      />
+      <IntelFactRow
+        icon={ShieldCheck}
+        label="PAN"
+        missing={missingPan}
+        knownValue={c360?.pan || '—'}
+        inputValue={panInput}
+        setInputValue={setPanInput}
+        placeholder="10-character PAN"
+        onFlag={() => setFlagField({ field: 'PAN', currentValue: c360?.pan || '' })}
+      />
+
+      {/* Decision maker */}
+      <div className="rounded-xl border-2 border-ink-200 p-4 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm font-semibold text-ink-900 flex items-center gap-2"><User className="h-4 w-4 text-ink-400 shrink-0" /> Decision Maker</p>
+          {!missingDecisionMaker && !editingDM && (
+            <button onClick={() => setEditingDM(true)} className="text-xs font-medium text-brand-600 hover:text-brand-700 shrink-0">This has changed</button>
+          )}
+        </div>
+        {!missingDecisionMaker && !editingDM && existingDecisionMaker ? (
+          <div className="flex items-center gap-3">
+            <Avatar name={existingDecisionMaker.name} size="sm" />
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-ink-900 truncate">{existingDecisionMaker.name}</p>
+              <p className="text-xs text-ink-400 truncate">{existingDecisionMaker.role} · {existingDecisionMaker.email}</p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {editingDM && existingDecisionMaker && (
+              <p className="text-xs text-ink-400">Currently {existingDecisionMaker.name} ({existingDecisionMaker.role}). Enter the new decision maker below.</p>
+            )}
+            <input type="text" value={dmName} onChange={(e) => setDmName(e.target.value)} placeholder="Decision maker name" className="input" />
+            <input type="text" value={dmRole} onChange={(e) => setDmRole(e.target.value)} placeholder="Role / title" className="input" />
+            <div className="grid grid-cols-2 gap-2">
+              <input type="email" value={dmEmail} onChange={(e) => setDmEmail(e.target.value)} placeholder="Email" className="input" />
+              <input type="tel" value={dmPhone} onChange={(e) => setDmPhone(e.target.value)} placeholder="Phone" className="input" />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {!anyMissing && !editingDM && (
+        <p className="text-xs text-emerald-600 flex items-center gap-1.5 py-1"><Check className="h-3.5 w-3.5" /> All account facts are on file — nothing to capture this visit.</p>
+      )}
+
+      {flagField && (
+        <AccountUpdateRequestModal account={account} field={flagField.field} currentValue={flagField.currentValue} onClose={() => setFlagField(null)} />
+      )}
+    </div>
+  );
+}
+
+const IMPROVEMENT_AREAS = ['Network reliability', 'Billing accuracy', 'Support responsiveness', 'Product fit', 'Pricing', 'Account management', 'Other'];
+
+function FeedbackStep({
+  account,
+  contact,
+  happiness,
+  setHappiness,
+  improvementAreas,
+  setImprovementAreas,
+  improvementDetails,
+  setImprovementDetails,
+  growthPlans,
+  setGrowthPlans,
+  usingCompetitor,
+  setUsingCompetitor,
+  competitorNames,
+  setCompetitorNames,
+  willingToRefer,
+  setWillingToRefer,
+  painPoints,
+  setPainPoints,
+  notes,
+  setNotes,
+}: {
+  account: Account;
+  contact: Contact | null;
+  happiness: 'happy' | 'neutral' | 'unhappy' | null;
+  setHappiness: (v: 'happy' | 'neutral' | 'unhappy') => void;
+  improvementAreas: string[];
+  setImprovementAreas: (v: string[]) => void;
+  improvementDetails: string;
+  setImprovementDetails: (v: string) => void;
+  growthPlans: string;
+  setGrowthPlans: (v: string) => void;
+  usingCompetitor: boolean | null;
+  setUsingCompetitor: (v: boolean) => void;
+  competitorNames: string[];
+  setCompetitorNames: (v: string[]) => void;
+  willingToRefer: boolean | null;
+  setWillingToRefer: (v: boolean) => void;
+  painPoints: string[];
+  setPainPoints: (v: string[]) => void;
+  notes: string;
+  setNotes: (v: string) => void;
+}) {
+  const [competitorInput, setCompetitorInput] = useState('');
+  const [painPointInput, setPainPointInput] = useState('');
+
+  const addCompetitor = () => {
+    const v = competitorInput.trim();
+    if (!v) return;
+    setCompetitorNames([...competitorNames, v]);
+    setCompetitorInput('');
+  };
+  const addPainPoint = () => {
+    const v = painPointInput.trim();
+    if (!v) return;
+    setPainPoints([...painPoints, v]);
+    setPainPointInput('');
+  };
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-lg font-bold text-ink-900 mb-1">Customer Feedback</h2>
+        <p className="text-sm text-ink-500">{account.name} · {contact?.name || 'No contact'}</p>
+      </div>
+
+      <div>
+        <p className="text-sm font-semibold text-ink-900 mb-2">Is the customer happy with us right now?</p>
+        <div className="grid grid-cols-3 gap-2">
+          {(
+            [
+              { v: 'happy' as const, label: 'Happy', cls: 'border-emerald-500 bg-emerald-50 text-emerald-700' },
+              { v: 'neutral' as const, label: 'Neutral', cls: 'border-ink-400 bg-ink-50 text-ink-700' },
+              { v: 'unhappy' as const, label: 'Unhappy', cls: 'border-red-500 bg-red-50 text-red-700' },
+            ]
+          ).map((opt) => (
+            <button
+              key={opt.v}
+              onClick={() => setHappiness(opt.v)}
+              className={`py-2.5 rounded-xl border-2 text-sm font-medium transition ${happiness === opt.v ? opt.cls : 'border-ink-200 text-ink-500'}`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {happiness === 'unhappy' && (
+        <div className="p-4 rounded-xl bg-red-50 border border-red-100 space-y-3">
+          <div className="flex items-center gap-2 text-red-700">
+            <AlertTriangle className="h-4 w-4" />
+            <p className="text-sm font-semibold">What needs to improve?</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {IMPROVEMENT_AREAS.map((a) => {
+              const active = improvementAreas.includes(a);
+              return (
+                <button
+                  key={a}
+                  onClick={() => setImprovementAreas(active ? improvementAreas.filter((x) => x !== a) : [...improvementAreas, a])}
+                  className={`chip border transition ${active ? 'bg-red-100 text-red-800 border-red-300' : 'bg-white text-ink-600 border-ink-200'}`}
+                >
+                  {active && <Check className="h-3 w-3" />} {a}
+                </button>
+              );
+            })}
+          </div>
+          <textarea value={improvementDetails} onChange={(e) => setImprovementDetails(e.target.value)} placeholder="Describe what needs to improve..." rows={3} className="input resize-none" />
+          <p className="text-xs text-red-600">Saving this interaction will automatically create or update an Issue.</p>
+        </div>
+      )}
+
+      <div className="space-y-4">
+        <p className="text-xs font-semibold text-ink-400 uppercase tracking-wide">For leadership visibility</p>
+
+        <div>
+          <label className="text-sm font-medium text-ink-700 mb-1.5 block">Business growth plans</label>
+          <textarea value={growthPlans} onChange={(e) => setGrowthPlans(e.target.value)} placeholder="Expansion, new markets, headcount growth..." rows={2} className="input resize-none" />
+        </div>
+
+        <div>
+          <p className="text-sm font-medium text-ink-700 mb-1.5">Evaluating or using a competitor?</p>
+          <div className="flex gap-2 mb-2">
+            <button onClick={() => setUsingCompetitor(true)} className={`flex-1 py-2 rounded-lg border-2 text-sm font-medium ${usingCompetitor === true ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-ink-200 text-ink-600'}`}>Yes</button>
+            <button onClick={() => setUsingCompetitor(false)} className={`flex-1 py-2 rounded-lg border-2 text-sm font-medium ${usingCompetitor === false ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-ink-200 text-ink-600'}`}>No</button>
+          </div>
+          {usingCompetitor && (
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={competitorInput}
+                onChange={(e) => setCompetitorInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCompetitor(); } }}
+                placeholder="Competitor name"
+                className="input"
+              />
+              <Button onClick={addCompetitor}><Plus className="h-4 w-4" /></Button>
+            </div>
+          )}
+          {competitorNames.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {competitorNames.map((c, i) => (
+                <span key={i} className="chip bg-ink-100 text-ink-700">
+                  {c}
+                  <button onClick={() => setCompetitorNames(competitorNames.filter((x) => x !== c))} className="p-0.5 -m-0.5"><X className="h-3 w-3" /></button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <p className="text-sm font-medium text-ink-700 mb-1.5">Would they refer us to others?</p>
+          <div className="flex gap-2">
+            <button onClick={() => setWillingToRefer(true)} className={`flex-1 py-2 rounded-lg border-2 text-sm font-medium ${willingToRefer === true ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-ink-200 text-ink-600'}`}>Yes</button>
+            <button onClick={() => setWillingToRefer(false)} className={`flex-1 py-2 rounded-lg border-2 text-sm font-medium ${willingToRefer === false ? 'border-red-500 bg-red-50 text-red-700' : 'border-ink-200 text-ink-600'}`}>No</button>
+          </div>
+        </div>
+
+        <div>
+          <label className="text-sm font-medium text-ink-700 mb-1.5 block">Pain points mentioned</label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={painPointInput}
+              onChange={(e) => setPainPointInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPainPoint(); } }}
+              placeholder="e.g. Invoice format is confusing"
+              className="input"
+            />
+            <Button onClick={addPainPoint}><Plus className="h-4 w-4" /></Button>
+          </div>
+          {painPoints.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {painPoints.map((p, i) => (
+                <span key={i} className="chip bg-ink-100 text-ink-700">
+                  {p}
+                  <button onClick={() => setPainPoints(painPoints.filter((x) => x !== p))} className="p-0.5 -m-0.5"><X className="h-3 w-3" /></button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <label className="text-sm font-medium text-ink-700 mb-1.5 block">Additional notes</label>
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Anything else worth capturing..." rows={3} className="input resize-none" />
+        </div>
       </div>
     </div>
   );

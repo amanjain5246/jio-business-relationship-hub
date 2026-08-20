@@ -9,7 +9,14 @@ const CUSTOMER360_FIELD_MAP: Record<string, keyof Customer360> = {
   GST: 'gst',
   GSTIN: 'gst',
   PAN: 'pan',
+  'Office Count': 'officeCount',
+  'Employee Count': 'employeeCount',
 };
+
+// Only these carry Verified/Unverified fieldMeta tracking; office/employee counts are
+// plain account-intelligence facts, corrected the same way but without that machinery.
+const TRUST_META_FIELDS = new Set<keyof Customer360>(['legalName', 'gst', 'pan']);
+const NUMERIC_C360_FIELDS = new Set<keyof Customer360>(['officeCount', 'employeeCount']);
 
 const ACCOUNT_FIELD_MAP: Record<string, keyof Account> = {
   ARR: 'arr',
@@ -20,7 +27,10 @@ const ACCOUNT_FIELD_MAP: Record<string, keyof Account> = {
 
 export function currentValueForField(account: Account, c360: Customer360 | undefined, field: string): string {
   const c360Field = CUSTOMER360_FIELD_MAP[field];
-  if (c360Field && c360) return String(c360[c360Field]);
+  if (c360Field && c360) {
+    const value = c360[c360Field];
+    return value === null || value === undefined ? '' : String(value);
+  }
   const accountField = ACCOUNT_FIELD_MAP[field];
   if (accountField) return String(account[accountField]);
   return '';
@@ -42,17 +52,21 @@ export function applyApprovedValue(data: AppData, req: UpdateRequest, reviewedBy
       ...data,
       customer360: data.customer360.map((c) => {
         if (c.accountId !== req.accountId) return c;
+        const requestedValue: unknown = NUMERIC_C360_FIELDS.has(c360Field)
+          ? Number(req.requestedValue) || 0
+          : req.requestedValue;
         const updated = applyCustomer360Updates(
           c,
-          { [c360Field]: req.requestedValue } as Partial<Customer360>,
+          { [c360Field]: requestedValue } as Partial<Customer360>,
           reviewedBy,
           'Update Request Approval',
         );
+        if (!TRUST_META_FIELDS.has(c360Field)) return updated;
         return {
           ...updated,
           fieldMeta: {
             ...updated.fieldMeta,
-            [c360Field]: { source: 'Update Request Approval', lastUpdatedAt: now, verificationStatus: 'Verified' },
+            [c360Field as 'legalName' | 'gst' | 'pan']: { source: 'Update Request Approval', lastUpdatedAt: now, verificationStatus: 'Verified' },
           },
         };
       }),

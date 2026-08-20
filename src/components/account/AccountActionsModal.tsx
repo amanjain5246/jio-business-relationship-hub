@@ -36,7 +36,7 @@ const ACTIONS: { id: ActionId; label: string; description: string; icon: typeof 
 ];
 
 const CAL_TYPES: CalendarType[] = ['QBR', 'Renewal', 'Review', 'Follow-up', 'Executive Meeting', 'Training'];
-const MEETING_MODES: MeetingMode[] = ['In-Person', 'Virtual', 'Phone', 'Hybrid'];
+const MEETING_MODES: MeetingMode[] = ['In-Person', 'Virtual', 'Phone'];
 const PRIORITIES: IssuePriority[] = ['P1', 'P2', 'P3', 'P4'];
 
 export function AccountActionsModal({ account, contacts, c360, onClose }: AccountActionsModalProps) {
@@ -415,7 +415,7 @@ export function AccountActionsModal({ account, contacts, c360, onClose }: Accoun
           </div>
           <div>
             <label className="text-sm font-medium text-ink-700 mb-1.5 block">Mode</label>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {MEETING_MODES.map((m) => (
                 <button
                   key={m}
