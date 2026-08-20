@@ -16,7 +16,7 @@ interface AccountsPageProps {
 }
 
 export function AccountsPage({ onNavigate }: AccountsPageProps) {
-  const { data } = useStore();
+  const { data, viewMode } = useStore();
   const [search, setSearch] = useState('');
   const [healthFilter, setHealthFilter] = useState<AccountHealth | 'all'>('all');
 
@@ -68,7 +68,7 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
           <EmptyState icon={<Building2 className="h-7 w-7" />} title="No accounts found" message="Try adjusting your search or filter." />
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className={`grid grid-cols-1 gap-4 ${viewMode === 'mobile' ? '' : 'md:grid-cols-2 lg:grid-cols-3'}`}>
           {filtered.map((acc) => {
             const renewalDays = daysUntil(acc.contractRenewal);
             const issuesCount = openIssueCount(data, acc.id);

@@ -68,7 +68,7 @@ export function TopBar({ onNavigate, onToggleMobileNav }: TopBarProps) {
       <div className="flex items-center gap-3 flex-1">
         <button
           onClick={onToggleMobileNav}
-          className="lg:hidden p-2 -ml-2 rounded-lg text-ink-600 hover:bg-ink-100 transition"
+          className={cn('p-2 -ml-2 rounded-lg text-ink-600 hover:bg-ink-100 transition', viewMode !== 'mobile' && 'lg:hidden')}
         >
           <Menu className="h-5 w-5" />
         </button>

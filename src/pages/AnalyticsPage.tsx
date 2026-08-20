@@ -81,9 +81,12 @@ export function AnalyticsPage({ onNavigate }: AnalyticsPageProps) {
   // Top accounts by ARR
   const topAccounts = [...data.accounts].sort((a, b) => b.arr - a.arr).slice(0, 5);
 
-  // Renewals within 90 days
+  // Renewals within the next 90 days (excludes contracts whose renewal date has already passed)
   const upcomingRenewals = [...data.accounts]
-    .filter((a) => daysUntil(a.contractRenewal) <= 90)
+    .filter((a) => {
+      const days = daysUntil(a.contractRenewal);
+      return days >= 0 && days <= 90;
+    })
     .sort((a, b) => new Date(a.contractRenewal).getTime() - new Date(b.contractRenewal).getTime());
 
   // RM workload

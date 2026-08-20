@@ -6,13 +6,12 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { AccountAvatar, Avatar } from '@/components/ui/Avatar';
 import { ProgressBar } from '@/components/ui/ProgressBar';
-import { Modal } from '@/components/ui/Modal';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { GuidedDiscoveryFlow } from '@/components/discovery/GuidedDiscoveryFlow';
 import { VerificationBadge } from '@/components/trust/VerificationBadge';
 import { AccountUpdateRequestModal } from '@/components/trust/AccountUpdateRequestModal';
+import { AccountActionsModal } from '@/components/account/AccountActionsModal';
 import { formatINR, formatDate, daysUntil, relativeTime } from '@/utils/format';
-import type { AccountHealth } from '@/types/models';
 import {
   ArrowLeft,
   Mail,
@@ -23,11 +22,10 @@ import {
   Calendar,
   ShieldCheck,
   FileText,
-  FileEdit,
+  Zap,
   Building2,
   Users,
   IndianRupee,
-  Save,
   Sparkles,
   Clock,
   Lock,
@@ -43,11 +41,9 @@ interface AccountDetailPageProps {
 type Tab = 'overview' | 'interactions' | 'issues' | 'opportunities' | 'calendar' | 'accountability' | 'mom' | 'discovery';
 
 export function AccountDetailPage({ accountId, onNavigate }: AccountDetailPageProps) {
-  const { data, updateAccount } = useStore();
+  const { data, viewMode } = useStore();
   const [tab, setTab] = useState<Tab>('overview');
-  const [editOpen, setEditOpen] = useState(false);
-  const [editHealth, setEditHealth] = useState<AccountHealth>('green');
-  const [editArr, setEditArr] = useState('');
+  const [actionsModalOpen, setActionsModalOpen] = useState(false);
   const [discoveryActive, setDiscoveryActive] = useState(false);
   const [requestFieldModal, setRequestFieldModal] = useState<{ field: string; currentValue: string } | null>(null);
   const [expandedHistoryField, setExpandedHistoryField] = useState<string | null>(null);
@@ -74,20 +70,6 @@ export function AccountDetailPage({ accountId, onNavigate }: AccountDetailPagePr
   const discoverySessions = data.discoverySessions
     .filter((s) => s.accountId === accountId)
     .sort((a, b) => b.date.localeCompare(a.date));
-
-  const openEdit = () => {
-    setEditHealth(account.health);
-    setEditArr(String(account.arr));
-    setEditOpen(true);
-  };
-
-  const saveEdit = () => {
-    updateAccount(accountId, {
-      health: editHealth,
-      arr: Number(editArr) || account.arr,
-    });
-    setEditOpen(false);
-  };
 
   const tabs: { id: Tab; label: string; icon: typeof MessageSquare; count: number }[] = [
     { id: 'overview', label: 'Overview', icon: Building2, count: 0 },
@@ -129,14 +111,14 @@ export function AccountDetailPage({ accountId, onNavigate }: AccountDetailPagePr
               </div>
             </div>
           </div>
-          <Button variant="primary" onClick={openEdit}>
-            <FileEdit className="h-4 w-4" /> Edit Account
+          <Button variant="primary" onClick={() => setActionsModalOpen(true)}>
+            <Zap className="h-4 w-4" /> Account Actions
           </Button>
         </div>
       </div>
 
       {/* Key stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className={`grid grid-cols-2 gap-4 ${viewMode === 'mobile' ? '' : 'lg:grid-cols-4'}`}>
         <Card className="p-4">
           <div className="flex items-center gap-2 text-ink-400 mb-1">
             <IndianRupee className="h-4 w-4" />
@@ -193,9 +175,9 @@ export function AccountDetailPage({ accountId, onNavigate }: AccountDetailPagePr
 
       {/* Tab content */}
       {tab === 'overview' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className={`grid grid-cols-1 gap-6 ${viewMode === 'mobile' ? '' : 'lg:grid-cols-3'}`}>
           {/* Customer 360 */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className={viewMode === 'mobile' ? 'space-y-6' : 'lg:col-span-2 space-y-6'}>
             {c360 && (
               <Card>
                 <CardHeader>
@@ -708,46 +690,14 @@ export function AccountDetailPage({ accountId, onNavigate }: AccountDetailPagePr
         </Card>
       )}
 
-      {/* Edit modal */}
-      <Modal
-        open={editOpen}
-        onClose={() => setEditOpen(false)}
-        title={`Edit ${account.name}`}
-        footer={
-          <>
-            <Button onClick={() => setEditOpen(false)}>Cancel</Button>
-            <Button variant="primary" onClick={saveEdit}>
-              <Save className="h-4 w-4" /> Save Changes
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <div>
-            <label className="text-sm font-medium text-ink-700 mb-2 block">Account Health</label>
-            <div className="grid grid-cols-3 gap-2">
-              {(['green', 'amber', 'red'] as const).map((h) => (
-                <button
-                  key={h}
-                  onClick={() => setEditHealth(h)}
-                  className={`flex items-center justify-center gap-2 py-2.5 rounded-lg border-2 transition ${editHealth === h ? 'border-brand-500 bg-brand-50' : 'border-ink-200 hover:border-ink-300'}`}
-                >
-                  <HealthBadge health={h} size="sm" showLabel />
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <label className="text-sm font-medium text-ink-700 mb-2 block">ARR (in ₹ Lakhs)</label>
-            <input
-              type="number"
-              value={editArr}
-              onChange={(e) => setEditArr(e.target.value)}
-              className="input"
-            />
-          </div>
-        </div>
-      </Modal>
+      {actionsModalOpen && (
+        <AccountActionsModal
+          account={account}
+          contacts={contacts}
+          c360={c360 ?? null}
+          onClose={() => setActionsModalOpen(false)}
+        />
+      )}
 
       {requestFieldModal && (
         <AccountUpdateRequestModal

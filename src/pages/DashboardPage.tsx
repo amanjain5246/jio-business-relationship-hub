@@ -26,7 +26,7 @@ interface DashboardPageProps {
 }
 
 export function DashboardPage({ onNavigate }: DashboardPageProps) {
-  const { data } = useStore();
+  const { data, viewMode } = useStore();
 
   const totalAccounts = data.accounts.length;
   const totalArr = data.accounts.reduce((sum, a) => sum + a.arr, 0);
@@ -41,7 +41,10 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
 
   const redAccounts = data.accounts.filter((a) => a.health === 'red');
   const upcomingRenewals = [...data.accounts]
-    .filter((a) => daysUntil(a.contractRenewal) <= 180)
+    .filter((a) => {
+      const days = daysUntil(a.contractRenewal);
+      return days >= 0 && days <= 180;
+    })
     .sort((a, b) => new Date(a.contractRenewal).getTime() - new Date(b.contractRenewal).getTime())
     .slice(0, 5);
 
@@ -69,7 +72,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       <DemoGuide onNavigate={onNavigate} />
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className={`grid grid-cols-1 gap-4 ${viewMode === 'mobile' ? '' : 'sm:grid-cols-2 lg:grid-cols-4'}`}>
         <StatCard label="Total Accounts" value={totalAccounts} icon={<Building2 className="h-5 w-5" />} tone="brand" subtext={`${data.contacts.length} contacts`} />
         <StatCard label="Annual Recurring Revenue" value={formatINR(totalArr)} icon={<IndianRupee className="h-5 w-5" />} tone="green" subtext="across all accounts" />
         <StatCard label="Open Issues" value={openIssues} icon={<AlertTriangle className="h-5 w-5" />} tone="red" subtext={`${data.issues.filter((i) => i.priority === 'P1' && i.status !== 'Resolved' && i.status !== 'Closed').length} P1 critical`} />
@@ -117,7 +120,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         </CardBody>
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className={`grid grid-cols-1 gap-6 ${viewMode === 'mobile' ? '' : 'lg:grid-cols-2'}`}>
         {/* Critical accounts */}
         <Card>
           <CardHeader>

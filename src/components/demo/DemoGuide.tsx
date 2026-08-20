@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useStore } from '@/store/StoreContext';
 import { Card, CardBody } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Sparkles, X, ArrowRight, Lock, Smartphone, Calendar } from 'lucide-react';
@@ -39,6 +40,7 @@ const STEPS = [
 ];
 
 export function DemoGuide({ onNavigate }: DemoGuideProps) {
+  const { viewMode } = useStore();
   const [dismissed, setDismissed] = useState(false);
   if (dismissed) return null;
 
@@ -60,7 +62,7 @@ export function DemoGuide({ onNavigate }: DemoGuideProps) {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className={`grid grid-cols-1 gap-3 ${viewMode === 'mobile' ? '' : 'md:grid-cols-2'}`}>
           {STEPS.map((s, i) => {
             const Icon = s.icon;
             return (

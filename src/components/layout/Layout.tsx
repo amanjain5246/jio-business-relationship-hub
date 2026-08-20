@@ -23,9 +23,9 @@ export function Layout({ children, activePath, onNavigate }: LayoutProps) {
 
   return (
     <div className="h-screen flex flex-col bg-ink-50 overflow-hidden">
-      {/* Mobile nav overlay */}
+      {/* Mobile nav overlay — shown whenever mobile preview is on, not just on a physically narrow screen */}
       {mobileNavOpen && (
-        <div className="fixed inset-0 z-40 lg:hidden">
+        <div className={cn('fixed inset-0 z-40', viewMode !== 'mobile' && 'lg:hidden')}>
           <div className="absolute inset-0 bg-ink-950/40 backdrop-blur-sm" onClick={() => setMobileNavOpen(false)} />
           <div className="absolute left-0 top-0 bottom-0 animate-slide-in">
             <div className="relative h-full">
@@ -42,8 +42,8 @@ export function Layout({ children, activePath, onNavigate }: LayoutProps) {
       )}
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Desktop sidebar */}
-        <div className="hidden lg:block">
+        {/* Desktop sidebar — hidden outright in mobile preview, otherwise responsive as usual */}
+        <div className={viewMode === 'mobile' ? 'hidden' : 'hidden lg:block'}>
           <Sidebar activePath={activePath} onNavigate={handleNavigate} />
         </div>
 
@@ -61,12 +61,12 @@ export function Layout({ children, activePath, onNavigate }: LayoutProps) {
             >
               <div className={viewMode === 'mobile' ? 'min-h-[calc(100vh-4rem)]' : 'min-h-full'}>
                 {viewMode === 'mobile' && (
-                  <div className="lg:hidden bg-brand-600 text-white px-4 py-2 text-xs font-medium flex items-center justify-center gap-2">
+                  <div className="bg-brand-600 text-white px-4 py-2 text-xs font-medium flex items-center justify-center gap-2">
                     <span className="h-1.5 w-1.5 rounded-full bg-white/80 animate-pulse" />
                     Mobile Preview Mode
                   </div>
                 )}
-                <div className={cn(viewMode === 'mobile' ? 'p-4' : 'p-4 md:p-6 lg:p-8')}>
+                <div className={cn(viewMode === 'mobile' ? 'p-4 pb-24' : 'p-4 md:p-6 lg:p-8')}>
                   {children}
                 </div>
               </div>
@@ -77,7 +77,7 @@ export function Layout({ children, activePath, onNavigate }: LayoutProps) {
 
       {/* Mobile bottom nav (only when in mobile view mode) */}
       {viewMode === 'mobile' && (
-        <div className="lg:hidden fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[420px] bg-white border-t border-ink-200 z-30">
+        <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[420px] bg-white border-t border-ink-200 z-30">
           <div className="flex items-center justify-around px-2 py-1.5">
             {NAV_ITEMS.slice(0, 5).map((item) => {
               const isActive = activePath === item.path;
